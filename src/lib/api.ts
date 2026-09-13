@@ -22,6 +22,21 @@ import {
   FamilyMember
 } from '../types';
 
+function getBaseApiUrl(): string {
+  if (typeof window === 'undefined') return '';
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.replace(/\/$/, '');
+  }
+  const customApi = localStorage.getItem('enguerra_api_url');
+  if (customApi) {
+    return customApi.replace(/\/$/, '');
+  }
+  if (window.location.hostname.endsWith('github.io')) {
+    return 'https://ais-dev-hltnaeuarclyh3jmadmon6-34952012245.us-west1.run.app';
+  }
+  return '';
+}
+
 class ApiClient {
   private sessionId: string | null = null;
 
@@ -52,7 +67,10 @@ class ApiClient {
       headers['x-session-id'] = this.sessionId;
     }
 
-    const res = await fetch(path, {
+    const base = getBaseApiUrl();
+    const fullUrl = base && path.startsWith('/') ? `${base}${path}` : path;
+
+    const res = await fetch(fullUrl, {
       ...options,
       headers,
     });
