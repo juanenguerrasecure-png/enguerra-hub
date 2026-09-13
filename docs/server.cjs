@@ -2736,6 +2736,450 @@ var MigrationService = class {
   }
 };
 
+// server/services/googleSheetsService.ts
+var GoogleSheetsService = class _GoogleSheetsService {
+  constructor() {
+    this.localStore = SheetStore.getInstance();
+    const sheetId = process.env.ENGUERRA_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID || process.env.SHEET_ID || "";
+    this.client = new GoogleSheetsClient(sheetId);
+  }
+  static getInstance() {
+    if (!_GoogleSheetsService.instance) {
+      _GoogleSheetsService.instance = new _GoogleSheetsService();
+    }
+    return _GoogleSheetsService.instance;
+  }
+  /**
+   * Retrieves active configuration read from .env
+   */
+  getConfig() {
+    const spreadsheetId = process.env.ENGUERRA_SHEET_ID || process.env.GOOGLE_SHEETS_SPREADSHEET_ID || process.env.SHEET_ID || "";
+    return {
+      spreadsheetId,
+      membersTab: process.env.SHEET_TAB_FAMILY_MEMBERS || "Family_Members",
+      tasksTab: process.env.SHEET_TAB_TASKS || "Tasks",
+      listsTab: process.env.SHEET_TAB_LISTS || "Lists",
+      responsibilitiesTab: process.env.SHEET_TAB_TASK_RESPONSIBILITIES || "Task_Responsibilities",
+      isConfigured: isGoogleConfigured() && Boolean(spreadsheetId)
+    };
+  }
+  /**
+   * Verifies Google Sheets connectivity and returns spreadsheet metadata
+   */
+  async checkConnection() {
+    const config = this.getConfig();
+    if (!config.isConfigured) {
+      return {
+        configured: false,
+        spreadsheetId: config.spreadsheetId,
+        liveConnected: false,
+        error: "Google OAuth credentials or spreadsheet ID not fully configured in environment"
+      };
+    }
+    try {
+      const metadata = await this.client.getMetadata();
+      return {
+        configured: true,
+        spreadsheetId: config.spreadsheetId,
+        liveConnected: true,
+        title: metadata.title,
+        sheets: metadata.sheets
+      };
+    } catch (err) {
+      console.warn("[GoogleSheetsService] Live connection check failed:", err.message);
+      return {
+        configured: true,
+        spreadsheetId: config.spreadsheetId,
+        liveConnected: false,
+        error: err.message || "Failed to fetch spreadsheet metadata"
+      };
+    }
+  }
+  /**
+   * Fetches family member profiles from Google Sheets
+   *
+   * Target Tab: Family_Members (or configured via SHEET_TAB_FAMILY_MEMBERS in .env)
+   */
+  async fetchFamilyMembers(options = {}) {
+    const config = this.getConfig();
+    if (config.isConfigured) {
+      try {
+        const range = `${config.membersTab}!A1:Z`;
+        const rows = await this.client.getValues(range);
+        if (rows && rows.length > 1) {
+          const headers = rows[0].map((h) => (h || "").trim());
+          const headerMap = /* @__PURE__ */ new Map();
+          headers.forEach((h, idx) => headerMap.set(h.toLowerCase(), idx));
+          const members = [];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const member = this.parseFamilyMemberRow(row, headerMap);
+            if (!member) continue;
+            if (!options.includeDeleted && member.Deleted_At) {
+              continue;
+            }
+            members.push(member);
+          }
+          console.log(`[GoogleSheetsService] Successfully fetched ${members.length} family profiles from Google Sheet tab "${config.membersTab}"`);
+          return members;
+        }
+      } catch (err) {
+        console.warn(`[GoogleSheetsService] Failed to read ${config.membersTab} from live Google Sheets:`, err.message);
+        if (options.forceLive) {
+          throw new Error(`Failed to fetch family members from Google Sheets API: ${err.message}`);
+        }
+      }
+    }
+    console.log("[GoogleSheetsService] Utilizing local store for family member profiles");
+    const localRecords = await this.localStore.getTableRecords("Family_Members");
+    return localRecords.map((r) => ({
+      Member_ID: r.Member_ID,
+      First_Name: r.First_Name,
+      Last_Name: r.Last_Name,
+      Display_Name: r.Display_Name,
+      Role: r.Role,
+      Birth_Date: r.Birth_Date,
+      Color: r.Color,
+      Avatar_Key: r.Avatar_Key,
+      Avatar_URL: r.Avatar_URL,
+      Avatar_Media_ID: r.Avatar_Media_ID,
+      Status: r.Status || "ACTIVE",
+      Created_At: r.Created_At,
+      Updated_At: r.Updated_At,
+      Version: Number(r.Version) || 1,
+      Deleted_At: r.Deleted_At || null
+    })).filter((m) => options.includeDeleted ? true : !m.Deleted_At);
+  }
+  /**
+   * Fetches a single family member by ID
+   */
+  async fetchFamilyMemberById(memberId) {
+    const all = await this.fetchFamilyMembers({ includeDeleted: true });
+    return all.find((m) => m.Member_ID === memberId) || null;
+  }
+  /**
+   * Fetches tasks from Google Sheets
+   *
+   * Target Tab: Tasks (or configured via SHEET_TAB_TASKS in .env)
+   */
+  async fetchTasks(options = {}) {
+    const config = this.getConfig();
+    if (config.isConfigured) {
+      try {
+        const range = `${config.tasksTab}!A1:Z`;
+        const rows = await this.client.getValues(range);
+        if (rows && rows.length > 1) {
+          const headers = rows[0].map((h) => (h || "").trim());
+          const headerMap = /* @__PURE__ */ new Map();
+          headers.forEach((h, idx) => headerMap.set(h.toLowerCase(), idx));
+          const tasks = [];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const task = this.parseTaskRow(row, headerMap);
+            if (!task) continue;
+            if (!options.includeDeleted && task.Deleted_At) {
+              continue;
+            }
+            if (options.memberId && task.Assigned_To !== options.memberId && task.Created_By !== options.memberId) {
+              continue;
+            }
+            tasks.push(task);
+          }
+          console.log(`[GoogleSheetsService] Successfully fetched ${tasks.length} tasks from Google Sheet tab "${config.tasksTab}"`);
+          return tasks;
+        }
+      } catch (err) {
+        console.warn(`[GoogleSheetsService] Failed to read ${config.tasksTab} from live Google Sheets:`, err.message);
+        if (options.forceLive) {
+          throw new Error(`Failed to fetch tasks from Google Sheets API: ${err.message}`);
+        }
+      }
+    }
+    const raw = await this.localStore.getTableRecords("Tasks");
+    return raw.map((r) => ({
+      Task_ID: r.Task_ID,
+      Title: r.Title,
+      Description: r.Description || "",
+      Due_Date: r.Due_Date,
+      Assigned_To: r.Assigned_To,
+      Status: r.Status || "PENDING",
+      Priority: r.Priority || "MEDIUM",
+      Visibility: r.Visibility || "FAMILY",
+      Category: r.Category || "CHORE",
+      Points: Number(r.Points) || 0,
+      Approved_By: r.Approved_By || null,
+      Created_By: r.Created_By,
+      Created_At: r.Created_At,
+      Updated_At: r.Updated_At,
+      Version: Number(r.Version) || 1,
+      Deleted_At: r.Deleted_At || null
+    })).filter((t) => {
+      if (!options.includeDeleted && t.Deleted_At) return false;
+      if (options.memberId && t.Assigned_To !== options.memberId && t.Created_By !== options.memberId) {
+        return false;
+      }
+      return true;
+    });
+  }
+  /**
+   * Fetches task lists from Google Sheets
+   *
+   * Target Tab: Lists (or configured via SHEET_TAB_LISTS in .env)
+   */
+  async fetchTaskLists(options = {}) {
+    const config = this.getConfig();
+    if (config.isConfigured) {
+      try {
+        const range = `${config.listsTab}!A1:Z`;
+        const rows = await this.client.getValues(range);
+        if (rows && rows.length > 1) {
+          const headers = rows[0].map((h) => (h || "").trim());
+          const headerMap = /* @__PURE__ */ new Map();
+          headers.forEach((h, idx) => headerMap.set(h.toLowerCase(), idx));
+          const lists = [];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const list = this.parseListRow(row, headerMap);
+            if (!list) continue;
+            if (!options.includeDeleted && list.Deleted_At) {
+              continue;
+            }
+            lists.push(list);
+          }
+          console.log(`[GoogleSheetsService] Successfully fetched ${lists.length} task lists from Google Sheet tab "${config.listsTab}"`);
+          return lists;
+        }
+      } catch (err) {
+        console.warn(`[GoogleSheetsService] Failed to read ${config.listsTab} from live Google Sheets:`, err.message);
+        if (options.forceLive) {
+          throw new Error(`Failed to fetch lists from Google Sheets API: ${err.message}`);
+        }
+      }
+    }
+    const raw = await this.localStore.getTableRecords("Lists");
+    return raw.map((r) => ({
+      List_ID: r.List_ID,
+      Title: r.Title,
+      Category: r.Category || "GENERAL",
+      Icon: r.Icon,
+      Visibility: r.Visibility || "FAMILY",
+      Created_By: r.Created_By,
+      Created_At: r.Created_At,
+      Updated_At: r.Updated_At,
+      Version: Number(r.Version) || 1,
+      Deleted_At: r.Deleted_At || null
+    })).filter((l) => options.includeDeleted ? true : !l.Deleted_At);
+  }
+  /**
+   * Fetches recurring task responsibilities from Google Sheets
+   *
+   * Target Tab: Task_Responsibilities (or configured via SHEET_TAB_TASK_RESPONSIBILITIES in .env)
+   */
+  async fetchTaskResponsibilities(options = {}) {
+    const config = this.getConfig();
+    if (config.isConfigured) {
+      try {
+        const range = `${config.responsibilitiesTab}!A1:Z`;
+        const rows = await this.client.getValues(range);
+        if (rows && rows.length > 1) {
+          const headers = rows[0].map((h) => (h || "").trim());
+          const headerMap = /* @__PURE__ */ new Map();
+          headers.forEach((h, idx) => headerMap.set(h.toLowerCase(), idx));
+          const responsibilities = [];
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const resp = this.parseResponsibilityRow(row, headerMap);
+            if (!resp) continue;
+            if (!options.includeDeleted && resp.Deleted_At) {
+              continue;
+            }
+            if (options.memberId && resp.Assigned_To !== options.memberId) {
+              continue;
+            }
+            responsibilities.push(resp);
+          }
+          return responsibilities;
+        }
+      } catch (err) {
+        console.warn(`[GoogleSheetsService] Failed to read ${config.responsibilitiesTab} from live Google Sheets:`, err.message);
+        if (options.forceLive) {
+          throw new Error(`Failed to fetch responsibilities from Google Sheets API: ${err.message}`);
+        }
+      }
+    }
+    const raw = await this.localStore.getTableRecords("Task_Responsibilities");
+    return raw.map((r) => {
+      let days = [];
+      try {
+        days = typeof r.Target_Days === "string" && r.Target_Days.startsWith("[") ? JSON.parse(r.Target_Days) : r.Target_Days ? [r.Target_Days] : [];
+      } catch {
+        days = [];
+      }
+      return {
+        Responsibility_ID: r.Responsibility_ID,
+        Title: r.Title,
+        Category: r.Category || "CHORE",
+        Recurrence: r.Recurrence || "DAILY",
+        Assigned_To: r.Assigned_To,
+        Target_Days: days,
+        Points: Number(r.Points) || 0,
+        Active: String(r.Active) !== "false",
+        Created_At: r.Created_At,
+        Updated_At: r.Updated_At,
+        Version: Number(r.Version) || 1,
+        Deleted_At: r.Deleted_At || null
+      };
+    }).filter((r) => {
+      if (!options.includeDeleted && r.Deleted_At) return false;
+      if (options.memberId && r.Assigned_To !== options.memberId) return false;
+      return true;
+    });
+  }
+  /**
+   * High-performance batch query for all task modules in one operation
+   */
+  async fetchAllTaskModules(options = {}) {
+    const config = this.getConfig();
+    if (config.isConfigured) {
+      try {
+        const ranges = [
+          `${config.tasksTab}!A1:Z`,
+          `${config.listsTab}!A1:Z`,
+          `${config.responsibilitiesTab}!A1:Z`
+        ];
+        const batchMap = await this.client.batchGetValues(ranges);
+        const tasksRows = this.findRangeData(batchMap, config.tasksTab);
+        const listsRows = this.findRangeData(batchMap, config.listsTab);
+        const respRows = this.findRangeData(batchMap, config.responsibilitiesTab);
+        const tasks2 = this.parseBatchRows(tasksRows, (row, map) => this.parseTaskRow(row, map), options);
+        const lists2 = this.parseBatchRows(listsRows, (row, map) => this.parseListRow(row, map), options);
+        const responsibilities2 = this.parseBatchRows(respRows, (row, map) => this.parseResponsibilityRow(row, map), options);
+        return { tasks: tasks2, lists: lists2, responsibilities: responsibilities2 };
+      } catch (err) {
+        console.warn("[GoogleSheetsService] Batch task fetch failed, falling back to individual calls:", err.message);
+      }
+    }
+    const [tasks, lists, responsibilities] = await Promise.all([
+      this.fetchTasks(options),
+      this.fetchTaskLists(options),
+      this.fetchTaskResponsibilities(options)
+    ]);
+    return { tasks, lists, responsibilities };
+  }
+  // ============================================================================
+  // Private Row Parsing Helpers
+  // ============================================================================
+  getCol(row, headerMap, key) {
+    const idx = headerMap.get(key.toLowerCase());
+    if (idx === void 0 || idx >= row.length) return "";
+    return (row[idx] ?? "").toString().trim();
+  }
+  parseFamilyMemberRow(row, headerMap) {
+    const memberId = this.getCol(row, headerMap, "Member_ID");
+    if (!memberId) return null;
+    return {
+      Member_ID: memberId,
+      First_Name: this.getCol(row, headerMap, "First_Name"),
+      Last_Name: this.getCol(row, headerMap, "Last_Name"),
+      Display_Name: this.getCol(row, headerMap, "Display_Name") || this.getCol(row, headerMap, "First_Name"),
+      Role: this.getCol(row, headerMap, "Role") || "CHILD",
+      Birth_Date: this.getCol(row, headerMap, "Birth_Date"),
+      Color: this.getCol(row, headerMap, "Color") || "#0284C7",
+      Avatar_Key: this.getCol(row, headerMap, "Avatar_Key") || void 0,
+      Avatar_URL: this.getCol(row, headerMap, "Avatar_URL") || void 0,
+      Avatar_Media_ID: this.getCol(row, headerMap, "Avatar_Media_ID") || void 0,
+      Status: this.getCol(row, headerMap, "Status") || "ACTIVE",
+      Created_At: this.getCol(row, headerMap, "Created_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Updated_At: this.getCol(row, headerMap, "Updated_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Version: parseInt(this.getCol(row, headerMap, "Version"), 10) || 1,
+      Deleted_At: this.getCol(row, headerMap, "Deleted_At") || null
+    };
+  }
+  parseTaskRow(row, headerMap) {
+    const taskId = this.getCol(row, headerMap, "Task_ID");
+    if (!taskId) return null;
+    return {
+      Task_ID: taskId,
+      Title: this.getCol(row, headerMap, "Title") || "Untitled Task",
+      Description: this.getCol(row, headerMap, "Description"),
+      Due_Date: this.getCol(row, headerMap, "Due_Date") || (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+      Assigned_To: this.getCol(row, headerMap, "Assigned_To"),
+      Status: this.getCol(row, headerMap, "Status") || "PENDING",
+      Priority: this.getCol(row, headerMap, "Priority") || "MEDIUM",
+      Visibility: this.getCol(row, headerMap, "Visibility") || "FAMILY",
+      Category: this.getCol(row, headerMap, "Category") || "CHORE",
+      Points: parseInt(this.getCol(row, headerMap, "Points"), 10) || 0,
+      Approved_By: this.getCol(row, headerMap, "Approved_By") || null,
+      Created_By: this.getCol(row, headerMap, "Created_By") || "system",
+      Created_At: this.getCol(row, headerMap, "Created_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Updated_At: this.getCol(row, headerMap, "Updated_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Version: parseInt(this.getCol(row, headerMap, "Version"), 10) || 1,
+      Deleted_At: this.getCol(row, headerMap, "Deleted_At") || null
+    };
+  }
+  parseListRow(row, headerMap) {
+    const listId = this.getCol(row, headerMap, "List_ID");
+    if (!listId) return null;
+    return {
+      List_ID: listId,
+      Title: this.getCol(row, headerMap, "Title") || "Untitled List",
+      Category: this.getCol(row, headerMap, "Category") || "GENERAL",
+      Icon: this.getCol(row, headerMap, "Icon") || void 0,
+      Visibility: this.getCol(row, headerMap, "Visibility") || "FAMILY",
+      Created_By: this.getCol(row, headerMap, "Created_By") || "system",
+      Created_At: this.getCol(row, headerMap, "Created_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Updated_At: this.getCol(row, headerMap, "Updated_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Version: parseInt(this.getCol(row, headerMap, "Version"), 10) || 1,
+      Deleted_At: this.getCol(row, headerMap, "Deleted_At") || null
+    };
+  }
+  parseResponsibilityRow(row, headerMap) {
+    const respId = this.getCol(row, headerMap, "Responsibility_ID");
+    if (!respId) return null;
+    let days = [];
+    const targetDaysRaw = this.getCol(row, headerMap, "Target_Days");
+    try {
+      days = targetDaysRaw.startsWith("[") ? JSON.parse(targetDaysRaw) : targetDaysRaw ? [targetDaysRaw] : [];
+    } catch {
+      days = [];
+    }
+    return {
+      Responsibility_ID: respId,
+      Title: this.getCol(row, headerMap, "Title") || "Responsibility",
+      Category: this.getCol(row, headerMap, "Category") || "CHORE",
+      Recurrence: this.getCol(row, headerMap, "Recurrence") || "DAILY",
+      Assigned_To: this.getCol(row, headerMap, "Assigned_To"),
+      Target_Days: days,
+      Points: parseInt(this.getCol(row, headerMap, "Points"), 10) || 0,
+      Active: this.getCol(row, headerMap, "Active").toLowerCase() !== "false",
+      Created_At: this.getCol(row, headerMap, "Created_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Updated_At: this.getCol(row, headerMap, "Updated_At") || (/* @__PURE__ */ new Date()).toISOString(),
+      Version: parseInt(this.getCol(row, headerMap, "Version"), 10) || 1,
+      Deleted_At: this.getCol(row, headerMap, "Deleted_At") || null
+    };
+  }
+  findRangeData(batchMap, tabName) {
+    for (const [key, val] of batchMap.entries()) {
+      if (key.includes(tabName)) return val;
+    }
+    return [];
+  }
+  parseBatchRows(rows, parser, options) {
+    if (!rows || rows.length <= 1) return [];
+    const headers = rows[0].map((h) => (h || "").trim());
+    const headerMap = /* @__PURE__ */ new Map();
+    headers.forEach((h, idx) => headerMap.set(h.toLowerCase(), idx));
+    const results = [];
+    for (let i = 1; i < rows.length; i++) {
+      const item = parser(rows[i], headerMap);
+      if (!item) continue;
+      if (!options.includeDeleted && item.Deleted_At) continue;
+      results.push(item);
+    }
+    return results;
+  }
+};
+
 // server/routes/api.ts
 function createApiRouter() {
   const router = (0, import_express.Router)();
@@ -2749,6 +3193,7 @@ function createApiRouter() {
   const hubService = new HubService();
   const diagnosticsService = new DiagnosticsService();
   const migrationService = new MigrationService();
+  const googleSheetsService = GoogleSheetsService.getInstance();
   const membersRepo = new FamilyMembersRepository();
   const auditRepo = new AuditRepository();
   const store = SheetStore.getInstance();
@@ -3258,6 +3703,81 @@ function createApiRouter() {
     try {
       const result = await migrationService.runMediaMigration();
       res.json(result);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  router.get("/google-sheets/config", (req, res) => {
+    const config = googleSheetsService.getConfig();
+    res.json(config);
+  });
+  router.get("/google-sheets/status", async (req, res) => {
+    try {
+      const status = await googleSheetsService.checkConnection();
+      res.json(status);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  router.get("/google-sheets/members", async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === "true";
+      const includeDeleted = req.query.includeDeleted === "true";
+      const members = await googleSheetsService.fetchFamilyMembers({ forceLive, includeDeleted });
+      res.json({
+        success: true,
+        count: members.length,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        sheetTab: googleSheetsService.getConfig().membersTab,
+        members
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  router.get("/google-sheets/tasks", async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === "true";
+      const memberId = req.query.memberId;
+      const includeDeleted = req.query.includeDeleted === "true";
+      const tasks = await googleSheetsService.fetchTasks({ forceLive, memberId, includeDeleted });
+      res.json({
+        success: true,
+        count: tasks.length,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        sheetTab: googleSheetsService.getConfig().tasksTab,
+        tasks
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  router.get("/google-sheets/lists", async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === "true";
+      const includeDeleted = req.query.includeDeleted === "true";
+      const lists = await googleSheetsService.fetchTaskLists({ forceLive, includeDeleted });
+      res.json({
+        success: true,
+        count: lists.length,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        sheetTab: googleSheetsService.getConfig().listsTab,
+        lists
+      });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+  router.get("/google-sheets/all-task-modules", async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === "true";
+      const memberId = req.query.memberId;
+      const data = await googleSheetsService.fetchAllTaskModules({ forceLive, memberId });
+      res.json({
+        success: true,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        ...data
+      });
     } catch (err) {
       res.status(500).json({ error: err.message });
     }

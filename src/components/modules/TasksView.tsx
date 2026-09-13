@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 export const TasksView: React.FC = () => {
-  const { session, members } = useAuth();
+  const { session, members, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [responsibilities, setResponsibilities] = useState<TaskResponsibility[]>([]);
   const [history, setHistory] = useState<TaskHistoryEntry[]>([]);
@@ -51,8 +51,10 @@ export const TasksView: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchTasksData();
-  }, []);
+    if (!authLoading && session) {
+      fetchTasksData();
+    }
+  }, [authLoading, session]);
 
   const handleStatusUpdate = async (taskId: string, status: string, note?: string) => {
     try {

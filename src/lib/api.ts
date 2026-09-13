@@ -19,7 +19,8 @@ import {
   MediaFile,
   PhotoAlbum,
   DiagnosticsReport,
-  FamilyMember
+  FamilyMember,
+  FamilyRole
 } from '../types';
 
 function getBaseApiUrl(): string {
@@ -110,6 +111,78 @@ class ApiClient {
     }
   }
 
+  // Auth: /api/auth/me
+  public async getAuthMe(): Promise<{
+    authenticated: boolean;
+    member: FamilyMember;
+    user: FamilyMember;
+    session: AuthUserSession;
+    role: FamilyRole;
+    isParent: boolean;
+    source: { spreadsheetId: string; sheetTab: string };
+  }> {
+    return this.request('/api/auth/me');
+  }
+
+  public async updateAuthMe(updates: Partial<FamilyMember> & { pin?: string }): Promise<{ success: boolean; member: FamilyMember }> {
+    return this.request('/api/auth/me', {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  // Family Members: /api/family
+  public async getFamily(options?: { includeInactive?: boolean; role?: string }): Promise<{
+    success: boolean;
+    family: string;
+    spreadsheetId: string;
+    sheetTab: string;
+    count: number;
+    summary: { total: number; parents: number; children: number; active: number };
+    members: FamilyMember[];
+  }> {
+    const params = new URLSearchParams();
+    if (options?.includeInactive) params.append('includeInactive', 'true');
+    if (options?.role) params.append('role', options.role);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request(`/api/family${qs}`);
+  }
+
+  public async getFamilyMember(memberId: string): Promise<FamilyMember> {
+    return this.request<FamilyMember>(`/api/family/${memberId}`);
+  }
+
+  public async createFamilyMember(data: {
+    firstName: string;
+    lastName?: string;
+    displayName?: string;
+    role: FamilyRole;
+    birthDate: string;
+    color?: string;
+    avatarKey?: string;
+    avatarUrl?: string;
+    pin?: string;
+  }): Promise<{ success: boolean; member: FamilyMember }> {
+    return this.request('/api/family', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  public async updateFamilyMember(
+    memberId: string,
+    updates: Partial<FamilyMember> & { pin?: string }
+  ): Promise<{ success: boolean; member: FamilyMember }> {
+    return this.request(`/api/family/${memberId}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  public async deleteFamilyMember(memberId: string): Promise<{ success: boolean; message: string }> {
+    return this.request(`/api/family/${memberId}`, { method: 'DELETE' });
+  }
+
   public async getMembers(includeInactive: boolean = false): Promise<FamilyMember[]> {
     return this.request<FamilyMember[]>(`/api/members${includeInactive ? '?includeInactive=true' : ''}`);
   }
@@ -138,14 +211,27 @@ class ApiClient {
   }
 
   // Tasks
-  public async getTasks(): Promise<TaskItem[]> {
-    return this.request<TaskItem[]>('/api/tasks');
+  public async getTasks(filter?: { assignedTo?: string; status?: string; category?: string; priority?: string }): Promise<TaskItem[]> {
+    const params = new URLSearchParams();
+    if (filter?.assignedTo) params.append('assigned_to', filter.assignedTo);
+    if (filter?.status) params.append('status', filter.status);
+    if (filter?.category) params.append('category', filter.category);
+    if (filter?.priority) params.append('priority', filter.priority);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    return this.request<TaskItem[]>(`/api/tasks${qs}`);
   }
 
-  public async createTask(task: Partial<TaskItem>): Promise<void> {
-    await this.request('/api/tasks', {
+  public async createTask(task: Partial<TaskItem>): Promise<{ success: boolean; task?: TaskItem }> {
+    return this.request('/api/tasks', {
       method: 'POST',
       body: JSON.stringify(task),
+    });
+  }
+
+  public async updateTask(id: string, updates: Partial<TaskItem>): Promise<{ success: boolean; task: TaskItem }> {
+    return this.request(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
     });
   }
 
@@ -154,6 +240,10 @@ class ApiClient {
       method: 'PATCH',
       body: JSON.stringify({ status, note }),
     });
+  }
+
+  public async deleteTask(id: string): Promise<{ success: boolean }> {
+    return this.request(`/api/tasks/${id}`, { method: 'DELETE' });
   }
 
   public async getResponsibilities(assignedTo?: string): Promise<TaskResponsibility[]> {
@@ -287,6 +377,23 @@ class ApiClient {
 
   public async getDataVersions(): Promise<Record<string, number>> {
     return this.request<Record<string, number>>('/api/data-versions');
+  }
+
+  // Google Sheets Service Operations
+  public async getGoogleSheetsStatus(): Promise<any> {
+    return this.request('/api/google-sheets/status');
+  }
+
+  public async getGoogleSheetsMembers(forceLive?: boolean): Promise<{ success: boolean; count: number; members: FamilyMember[] }> {
+    return this.request(`/api/google-sheets/members${forceLive ? '?forceLive=true' : ''}`);
+  }
+
+  public async getGoogleSheetsTasks(forceLive?: boolean): Promise<{ success: boolean; count: number; tasks: TaskItem[] }> {
+    return this.request(`/api/google-sheets/tasks${forceLive ? '?forceLive=true' : ''}`);
+  }
+
+  public async getGoogleSheetsLists(forceLive?: boolean): Promise<{ success: boolean; count: number; lists: FamilyList[] }> {
+    return this.request(`/api/google-sheets/lists${forceLive ? '?forceLive=true' : ''}`);
   }
 }
 

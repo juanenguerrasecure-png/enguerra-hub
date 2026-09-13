@@ -10,7 +10,10 @@ import {
   ChevronDown,
   Cloud,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  ArrowLeftRight,
+  Maximize2
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
@@ -19,9 +22,13 @@ export const Header: React.FC = () => {
     members,
     activeShell,
     deviceMode,
+    detectedType,
+    isAutoDetect,
     systemInfo,
     switchProfile,
     switchDeviceMode,
+    enableAutoDetect,
+    toggleHubMode,
     lockHub,
   } = useAuth();
 
@@ -31,70 +38,112 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
         {/* Brand & Crest */}
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 rounded-xl bg-orange-700 text-white flex items-center justify-center font-serif text-lg font-bold shadow-xs">
+        <div className="flex items-center space-x-3 shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-700 to-indigo-800 text-white flex items-center justify-center font-serif text-lg font-bold shadow-xs">
             EN
           </div>
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-base font-bold text-stone-900 tracking-tight">Enguerra of NY</h1>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-stone-100 text-stone-600 border border-stone-200">
+              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
                 {systemInfo?.appEnv || 'DEV'}
               </span>
             </div>
             <p className="text-[11px] text-stone-500 hidden sm:block">
-              Family Operating System • Authoritative Sheets & Drive
+              Our Family. One App. A Brighter Everyday.
             </p>
           </div>
         </div>
 
-        {/* Device Mode Switcher */}
-        <div className="hidden md:flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200 text-stone-600 text-xs">
+        {/* Visual Mode Auto-Detection & Switcher */}
+        <div className="flex items-center space-x-1 sm:space-x-2">
+          {/* Main Device Switcher Bar */}
+          <div className="flex items-center bg-stone-100/90 p-1 rounded-xl border border-stone-200 text-stone-600 text-xs">
+            {/* Auto-detect button */}
+            <button
+              onClick={enableAutoDetect}
+              title={`Auto-detecting screen size (${detectedType})`}
+              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                isAutoDetect && deviceMode !== 'HUB'
+                  ? 'bg-blue-600 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">Auto</span>
+              <span className="text-[10px] uppercase opacity-90">({detectedType.slice(0, 3)})</span>
+            </button>
+
+            {/* Desktop Mode Button */}
+            <button
+              onClick={() => switchDeviceMode('DESKTOP')}
+              title="Force Desktop Layout"
+              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all ${
+                !isAutoDetect && deviceMode === 'DESKTOP'
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'hover:text-stone-900'
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden md:inline">Desktop</span>
+            </button>
+
+            {/* Tablet Mode Button */}
+            <button
+              onClick={() => switchDeviceMode('TABLET')}
+              title="Force Tablet Layout (iPad)"
+              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all ${
+                !isAutoDetect && deviceMode === 'TABLET'
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'hover:text-stone-900'
+              }`}
+            >
+              <Tablet className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden md:inline">Tablet</span>
+            </button>
+
+            {/* Mobile Mode Button */}
+            <button
+              onClick={() => switchDeviceMode('MOBILE')}
+              title="Force Mobile Layout (iPhone)"
+              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all ${
+                !isAutoDetect && deviceMode === 'MOBILE'
+                  ? 'bg-white text-stone-900 shadow-xs'
+                  : 'hover:text-stone-900'
+              }`}
+            >
+              <Smartphone className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden md:inline">Mobile</span>
+            </button>
+          </div>
+
+          {/* Alternate HUB Access (Prominent dedicated toggle) */}
           <button
-            onClick={() => switchDeviceMode('DESKTOP')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
-              deviceMode === 'DESKTOP' ? 'bg-white text-stone-900 shadow-xs' : 'hover:text-stone-900'
+            onClick={toggleHubMode}
+            title={deviceMode === 'HUB' ? 'Exit Family Hub and return to normal mode' : 'Switch to Family Hub Kiosk (Fridge/Wall Display)'}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs border ${
+              deviceMode === 'HUB'
+                ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-500 ring-2 ring-amber-400/50'
+                : 'bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300'
             }`}
           >
-            <Monitor className="w-3.5 h-3.5" />
-            <span>Desktop</span>
-          </button>
-          <button
-            onClick={() => switchDeviceMode('TABLET')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
-              deviceMode === 'TABLET' ? 'bg-white text-stone-900 shadow-xs' : 'hover:text-stone-900'
-            }`}
-          >
-            <Tablet className="w-3.5 h-3.5" />
-            <span>iPad</span>
-          </button>
-          <button
-            onClick={() => switchDeviceMode('MOBILE')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
-              deviceMode === 'MOBILE' ? 'bg-white text-stone-900 shadow-xs' : 'hover:text-stone-900'
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>iPhone</span>
-          </button>
-          <button
-            onClick={() => switchDeviceMode('HUB')}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-lg font-medium transition-all ${
-              deviceMode === 'HUB' ? 'bg-amber-600 text-white shadow-xs' : 'hover:text-stone-900'
-            }`}
-          >
-            <Tv className="w-3.5 h-3.5" />
-            <span>Family Hub</span>
+            <Tv className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">
+              {deviceMode === 'HUB' ? 'Exit Hub' : 'Hub Mode'}
+            </span>
+            <span className="text-[10px] uppercase font-black px-1.5 py-0.2 rounded bg-amber-200/80 text-amber-900">
+              {deviceMode === 'HUB' ? 'ACTIVE' : 'KIOSK'}
+            </span>
           </button>
         </div>
 
         {/* Right Action: Sync Status & Active Member Switcher */}
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
           {/* Google Sync Status Pill */}
           <div
-            className="hidden lg:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
+            className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-medium border"
             style={{
               borderColor: systemInfo?.googleConnected.sheets ? '#A7F3D0' : '#E2E8F0',
               backgroundColor: systemInfo?.googleConnected.sheets ? '#ECFDF5' : '#F8FAFC',
@@ -125,14 +174,14 @@ export const Header: React.FC = () => {
                   {currentMember?.First_Name || 'Select Member'}
                 </div>
                 <div className="text-[10px] text-stone-500 uppercase tracking-wider">
-                  {activeShell === 'FAMILY_HUB' ? 'Hub Mode' : currentMember?.Role || 'GUEST'}
+                  {deviceMode === 'HUB' ? 'Hub Mode' : currentMember?.Role || 'GUEST'}
                 </div>
               </div>
               <ChevronDown className="w-4 h-4 text-stone-400" />
             </button>
 
             {isProfileDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-white shadow-xl border border-stone-200 py-2 z-50 animate-in fade-in zoom-in duration-150">
+              <div className="absolute right-0 mt-2 w-60 rounded-2xl bg-white shadow-xl border border-stone-200 py-2 z-50 animate-in fade-in zoom-in duration-150">
                 <div className="px-3 py-1.5 border-b border-stone-100 text-[11px] font-semibold uppercase tracking-wider text-stone-400">
                   Switch Family Member
                 </div>
@@ -169,12 +218,17 @@ export const Header: React.FC = () => {
                   <button
                     onClick={() => {
                       setIsProfileDropdownOpen(false);
-                      switchDeviceMode('HUB');
+                      toggleHubMode();
                     }}
-                    className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-amber-700 hover:bg-amber-50 flex items-center space-x-2"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-800 hover:bg-amber-50 flex items-center justify-between"
                   >
-                    <Tv className="w-4 h-4" />
-                    <span>Switch to Family Hub Shell</span>
+                    <div className="flex items-center space-x-2">
+                      <Tv className="w-4 h-4 text-amber-600" />
+                      <span>{deviceMode === 'HUB' ? 'Exit Family Hub' : 'Alternate HUB Access'}</span>
+                    </div>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">
+                      Fridge
+                    </span>
                   </button>
                 </div>
               </div>

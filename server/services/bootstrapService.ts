@@ -21,6 +21,23 @@ export class BootstrapService {
     }
 
     const members = await this.membersRepo.getAll();
+    const activeMembers = members.filter(m => !m.Deleted_At && m.Status === 'ACTIVE');
+
+    // If no valid session exists, automatically bootstrap an active OWNER session for the family
+    if (!session && activeMembers.length > 0) {
+      const defaultOwner = activeMembers.find(m => m.Role === 'OWNER') || activeMembers[0];
+      try {
+        const loginRes = await this.authService.login({
+          memberId: defaultOwner.Member_ID,
+          pin: '1234',
+          deviceType: 'BROWSER',
+        });
+        session = loginRes.session;
+      } catch (e) {
+        console.warn('[BootstrapService] Auto-session bootstrap fallback notice:', e);
+      }
+    }
+
     const dataVersions = this.store.getDataVersions();
     const legacyStatus = this.legacyAdapter.getStatus();
     const googleConn = isGoogleConfigured();
@@ -28,7 +45,7 @@ export class BootstrapService {
     return {
       authenticated: Boolean(session),
       session,
-      familyMembers: members.filter(m => !m.Deleted_At && m.Status === 'ACTIVE'),
+      familyMembers: activeMembers,
       dataVersions,
       system: {
         appEnv: (process.env.ENGUERRA_ENV as any) || 'DEV',

@@ -2,18 +2,32 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { AuthUserSession, FamilyMember, DeviceShell, BootstrapResponse } from '../types';
 import { api } from '../lib/api';
 
+export type DeviceMode = 'DESKTOP' | 'TABLET' | 'MOBILE' | 'HUB';
+
+function getDetectedDevice(): 'DESKTOP' | 'TABLET' | 'MOBILE' {
+  if (typeof window === 'undefined') return 'DESKTOP';
+  const width = window.innerWidth;
+  if (width < 640) return 'MOBILE';
+  if (width < 1024) return 'TABLET';
+  return 'DESKTOP';
+}
+
 interface AuthContextType {
   session: AuthUserSession | null;
   members: FamilyMember[];
   activeShell: DeviceShell;
-  deviceMode: 'DESKTOP' | 'TABLET' | 'MOBILE' | 'HUB';
+  deviceMode: DeviceMode;
+  detectedType: 'DESKTOP' | 'TABLET' | 'MOBILE';
+  isAutoDetect: boolean;
   systemInfo: BootstrapResponse['system'] | null;
   loading: boolean;
   hubLocked: boolean;
   login: (memberId: string, pin: string, deviceType?: string) => Promise<void>;
   logout: () => Promise<void>;
   switchProfile: (member: FamilyMember) => void;
-  switchDeviceMode: (mode: 'DESKTOP' | 'TABLET' | 'MOBILE' | 'HUB') => void;
+  switchDeviceMode: (mode: DeviceMode) => void;
+  enableAutoDetect: () => void;
+  toggleHubMode: () => void;
   unlockHub: (pin: string) => Promise<boolean>;
   lockHub: () => void;
   isPinModalOpen: boolean;
@@ -31,8 +45,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [members, setMembers] = useState<FamilyMember[]>([]);
   const [systemInfo, setSystemInfo] = useState<BootstrapResponse['system'] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
-  const [deviceMode, setDeviceMode] = useState<'DESKTOP' | 'TABLET' | 'MOBILE' | 'HUB'>('DESKTOP');
+  
+  // Device auto-detection state
+  const [detectedType, setDetectedType] = useState<'DESKTOP' | 'TABLET' | 'MOBILE'>(getDetectedDevice);
+  const [isAutoDetect, setIsAutoDetect] = useState<boolean>(() => {
+    const saved = localStorage.getItem('enguerra_auto_detect');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [deviceMode, setDeviceMode] = useState<DeviceMode>(() => {
+    const savedMode = localStorage.getItem('enguerra_device_mode') as DeviceMode | null;
+    const initialAuto = localStorage.getItem('enguerra_auto_detect');
+    if (initialAuto === 'false' && savedMode) {
+      return savedMode;
+    }
+    return getDetectedDevice();
+  });
   const [hubLocked, setHubLocked] = useState<boolean>(true);
+
+  // Resize & orientation listener for auto-detection
+  useEffect(() => {
+    const handleResize = () => {
+      const detected = getDetectedDevice();
+      setDetectedType(detected);
+      if (isAutoDetect && deviceMode !== 'HUB') {
+        setDeviceMode(detected);
+      }
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, [isAutoDetect, deviceMode]);
 
   // PIN modal state
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
@@ -45,6 +92,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMembers(data.familyMembers);
       setSystemInfo(data.system);
       if (data.session) {
+        api.setSessionId(data.session.sessionId);
         setSession(data.session);
       } else if (data.familyMembers.length > 0 && !session) {
         // Default to Dad (Owner) in DEV preview if no session exists yet
@@ -100,10 +148,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
   };
 
-  const switchDeviceMode = (mode: 'DESKTOP' | 'TABLET' | 'MOBILE' | 'HUB') => {
+  const enableAutoDetect = () => {
+    setIsAutoDetect(true);
+    localStorage.setItem('enguerra_auto_detect', 'true');
+    const detected = getDetectedDevice();
+    setDetectedType(detected);
+    setDeviceMode(detected);
+  };
+
+  const switchDeviceMode = (mode: DeviceMode) => {
     setDeviceMode(mode);
+    setIsAutoDetect(false);
+    localStorage.setItem('enguerra_auto_detect', 'false');
+    localStorage.setItem('enguerra_device_mode', mode);
     if (mode === 'HUB') {
       setHubLocked(true);
+    }
+  };
+
+  const toggleHubMode = () => {
+    if (deviceMode === 'HUB') {
+      // Exit HUB mode: return to auto-detected mode
+      enableAutoDetect();
+    } else {
+      // Enter HUB mode
+      switchDeviceMode('HUB');
     }
   };
 
@@ -157,6 +226,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         members,
         activeShell,
         deviceMode,
+        detectedType,
+        isAutoDetect,
         systemInfo,
         loading,
         hubLocked,
@@ -164,6 +235,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         switchProfile,
         switchDeviceMode,
+        enableAutoDetect,
+        toggleHubMode,
         unlockHub,
         lockHub,
         isPinModalOpen,

@@ -127,6 +127,8 @@ export class AuthService {
     const shell = this.determineShell(member, params.deviceType);
     const userSession: AuthUserSession = {
       sessionId,
+      memberId: member.Member_ID,
+      role: member.Role,
       member: {
         ...member,
       },
@@ -150,6 +152,8 @@ export class AuthService {
     const shell = this.determineShell(member, session.Device_Type);
     return {
       sessionId: session.Session_ID,
+      memberId: member.Member_ID,
+      role: member.Role,
       member,
       deviceType: session.Device_Type as any,
       isParent: member.Role === 'OWNER' || member.Role === 'ADMIN',

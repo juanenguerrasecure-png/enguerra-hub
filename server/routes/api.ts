@@ -9,8 +9,10 @@ import { MediaService } from '../services/mediaService';
 import { HubService } from '../services/hubService';
 import { DiagnosticsService } from '../services/diagnosticsService';
 import { MigrationService } from '../services/migrationService';
+import { GoogleSheetsService } from '../services/googleSheetsService';
 import { LegacyAuthService } from '../services/legacyAuthService';
 import { FamilyMembersRepository } from '../repositories/familyMembersRepository';
+import { GoogleSheetsFamilyRepository, GoogleSheetsTasksRepository } from '../repositories/sheetsRepository';
 import { AuditRepository } from '../repositories/auditRepository';
 import { SheetStore } from '../storage/sheetStore';
 import { AuthUserSession } from '../../src/types';
@@ -32,13 +34,22 @@ export function createApiRouter(): Router {
   const hubService = new HubService();
   const diagnosticsService = new DiagnosticsService();
   const migrationService = new MigrationService();
+  const googleSheetsService = GoogleSheetsService.getInstance();
+  const sheetsFamilyRepo = GoogleSheetsFamilyRepository.getInstance();
+  const sheetsTasksRepo = GoogleSheetsTasksRepository.getInstance();
   const membersRepo = new FamilyMembersRepository();
   const auditRepo = new AuditRepository();
   const store = SheetStore.getInstance();
 
   // Auth Middleware
   const authenticate = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const sessionId = (req.headers['x-session-id'] as string) || (req.query.session_id as string);
+    let sessionId = (req.headers['x-session-id'] as string) || (req.query.session_id as string);
+    if (!sessionId && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        sessionId = authHeader.slice(7).trim();
+      }
+    }
     if (sessionId) {
       try {
         const session = await authService.validateSession(sessionId);
@@ -114,6 +125,49 @@ export function createApiRouter(): Router {
     }
   });
 
+  // Auth: /api/auth/me - Authenticated Member Profile from Family_Members Google Sheets tab
+  router.get('/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const memberId = req.userSession!.memberId;
+      const member = await sheetsFamilyRepo.getById(memberId);
+      if (!member) {
+        return res.status(404).json({
+          authenticated: false,
+          error: 'MEMBER_NOT_FOUND: Profile not found in Family_Members tab',
+        });
+      }
+
+      res.json({
+        authenticated: true,
+        member,
+        user: member,
+        session: req.userSession,
+        role: req.userSession!.role,
+        isParent: req.userSession!.isParent,
+        source: {
+          spreadsheetId: sheetsFamilyRepo.getSpreadsheetId(),
+          sheetTab: sheetsFamilyRepo.getTabName(),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.patch('/auth/me', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const memberId = req.userSession!.memberId;
+      const updated = await sheetsFamilyRepo.updateMember(memberId, req.body);
+      res.json({
+        success: true,
+        member: updated,
+        user: updated,
+      });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   // Auth: Validate Session
   router.get('/auth/session', (req: AuthenticatedRequest, res) => {
     if (!req.userSession) {
@@ -178,16 +232,132 @@ export function createApiRouter(): Router {
     }
   });
 
-  // Family Members
+  // Family Members: Interfaces with Family_Members Google Sheets tab via GoogleSheetsFamilyRepository
+  router.get('/family', async (req: AuthenticatedRequest, res) => {
+    try {
+      const includeInactive = req.query.includeInactive === 'true';
+      const role = req.query.role as string | undefined;
+      const format = req.query.format as string | undefined;
+
+      const summary = await sheetsFamilyRepo.getFamilySummary();
+      let members = summary.members;
+
+      if (!includeInactive) {
+        members = members.filter(m => m.Status === 'ACTIVE');
+      }
+      if (role) {
+        members = members.filter(m => m.Role.toUpperCase() === role.toUpperCase());
+      }
+
+      if (format === 'array') {
+        return res.json(members);
+      }
+
+      res.json({
+        success: true,
+        family: 'Enguerra of NY',
+        spreadsheetId: sheetsFamilyRepo.getSpreadsheetId(),
+        sheetTab: sheetsFamilyRepo.getTabName(),
+        count: members.length,
+        summary: {
+          total: summary.totalMembers,
+          parents: summary.parentsCount,
+          children: summary.childrenCount,
+          active: summary.activeCount,
+        },
+        members,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/family/summary', async (req: AuthenticatedRequest, res) => {
+    try {
+      const summary = await sheetsFamilyRepo.getFamilySummary();
+      res.json(summary);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/family/:memberId', async (req: AuthenticatedRequest, res) => {
+    try {
+      const member = await sheetsFamilyRepo.getById(req.params.memberId);
+      if (!member) {
+        return res.status(404).json({ error: `Member with ID "${req.params.memberId}" not found in ${sheetsFamilyRepo.getTabName()}` });
+      }
+      res.json(member);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/family', requireAuth, requireParent, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { firstName, lastName, displayName, role, birthDate, color, avatarKey, avatarUrl, pin } = req.body;
+      if (!firstName || !role || !birthDate) {
+        return res.status(400).json({ error: 'Missing required fields: firstName, role, birthDate' });
+      }
+      const member = await sheetsFamilyRepo.createMember(
+        { firstName, lastName, displayName, role, birthDate, color, avatarKey, avatarUrl, pin },
+        req.userSession!.memberId
+      );
+      res.status(201).json({ success: true, member });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.put('/family/:memberId', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { memberId } = req.params;
+      const isParent = req.userSession!.isParent;
+      const isSelf = req.userSession!.memberId === memberId;
+
+      if (!isParent && !isSelf) {
+        return res.status(403).json({ error: 'FORBIDDEN: You can only edit your own profile' });
+      }
+
+      const updated = await sheetsFamilyRepo.updateMember(memberId, req.body);
+      res.json({ success: true, member: updated });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch('/family/:memberId', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const { memberId } = req.params;
+      const isParent = req.userSession!.isParent;
+      const isSelf = req.userSession!.memberId === memberId;
+
+      if (!isParent && !isSelf) {
+        return res.status(403).json({ error: 'FORBIDDEN: You can only edit your own profile' });
+      }
+
+      const updated = await sheetsFamilyRepo.updateMember(memberId, req.body);
+      res.json({ success: true, member: updated });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.delete('/family/:memberId', requireAuth, requireParent, async (req: AuthenticatedRequest, res) => {
+    try {
+      await sheetsFamilyRepo.deleteMember(req.params.memberId);
+      res.json({ success: true, message: `Member ${req.params.memberId} marked inactive in ${sheetsFamilyRepo.getTabName()}` });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // Legacy /members alias for backward compatibility
   router.get('/members', async (req: AuthenticatedRequest, res) => {
     try {
       const includeInactive = req.query.includeInactive === 'true';
-      const members = await membersRepo.getAll();
-      if (includeInactive) {
-        res.json(members.filter(m => !m.Deleted_At));
-      } else {
-        res.json(members.filter(m => !m.Deleted_At && m.Status === 'ACTIVE'));
-      }
+      const members = await sheetsFamilyRepo.getAll({ includeInactive });
+      res.json(members);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -195,7 +365,7 @@ export function createApiRouter(): Router {
 
   router.get('/members/:memberId', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const member = await membersRepo.getById(req.params.memberId);
+      const member = await sheetsFamilyRepo.getById(req.params.memberId);
       if (!member) {
         return res.status(404).json({ error: 'Member not found' });
       }
@@ -358,45 +528,44 @@ export function createApiRouter(): Router {
     }
   });
 
-  // Tasks
+  // Tasks: Interfaces with Tasks Google Sheets tab via GoogleSheetsTasksRepository
   router.get('/tasks', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
-      const role = req.userSession!.member.Role;
-      const memberId = req.userSession!.member.Member_ID;
+      const role = req.userSession!.role;
+      const memberId = req.userSession!.memberId;
       const isHubLocked = req.userSession!.hubLocked;
-      const tasks = await taskService.getTasks(role, memberId, isHubLocked);
+
+      const tasks = await sheetsTasksRepo.getTasks({
+        memberRole: role,
+        memberId,
+        isHubLocked,
+        assignedTo: (req.query.assigned_to as string) || (req.query.memberId as string),
+        status: req.query.status as string,
+        priority: req.query.priority as string,
+        category: req.query.category as string,
+        includeDeleted: req.query.includeDeleted === 'true',
+      });
+
+      if (req.query.format === 'wrapped') {
+        return res.json({
+          success: true,
+          count: tasks.length,
+          spreadsheetId: sheetsTasksRepo.getSpreadsheetId(),
+          sheetTab: sheetsTasksRepo.getTabName(),
+          tasks,
+        });
+      }
+
       res.json(tasks);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  router.post('/tasks', requireAuth, async (req: AuthenticatedRequest, res) => {
-    try {
-      const memberId = req.userSession!.member.Member_ID;
-      await taskService.createTask(req.body, memberId);
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(400).json({ error: err.message });
-    }
-  });
-
-  router.patch('/tasks/:id/status', requireAuth, async (req: AuthenticatedRequest, res) => {
-    try {
-      const role = req.userSession!.member.Role;
-      const memberId = req.userSession!.member.Member_ID;
-      const { status, note } = req.body;
-      const updated = await taskService.updateStatus(req.params.id, status, role, memberId, note);
-      res.json(updated);
-    } catch (err: any) {
-      res.status(400).json({ error: err.message });
-    }
-  });
-
   router.get('/tasks/responsibilities', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const assignedTo = req.query.assigned_to as string | undefined;
-      const resp = await taskService.getResponsibilities(assignedTo);
+      const resp = await sheetsTasksRepo.getResponsibilities(assignedTo);
       res.json(resp);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -407,10 +576,83 @@ export function createApiRouter(): Router {
     try {
       const taskId = req.query.task_id as string | undefined;
       const memberId = req.query.member_id as string | undefined;
-      const history = await taskService.getTaskHistory(taskId, memberId);
+      const history = await sheetsTasksRepo.getHistory(taskId, memberId);
       res.json(history);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/tasks/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const task = await sheetsTasksRepo.getById(req.params.id);
+      if (!task) {
+        return res.status(404).json({ error: `Task with ID "${req.params.id}" not found in ${sheetsTasksRepo.getTabName()}` });
+      }
+      res.json(task);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.post('/tasks', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const memberId = req.userSession!.memberId;
+      const task = await sheetsTasksRepo.createTask({
+        title: req.body.title || req.body.Title,
+        description: req.body.description || req.body.Description,
+        dueDate: req.body.dueDate || req.body.Due_Date,
+        assignedTo: req.body.assignedTo || req.body.Assigned_To,
+        category: req.body.category || req.body.Category,
+        priority: req.body.priority || req.body.Priority,
+        visibility: req.body.visibility || req.body.Visibility,
+        points: req.body.points || req.body.Points,
+      }, memberId);
+      res.status(201).json({ success: true, task });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.put('/tasks/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const memberId = req.userSession!.memberId;
+      const updated = await sheetsTasksRepo.updateTask(req.params.id, req.body, memberId);
+      res.json({ success: true, task: updated });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch('/tasks/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const memberId = req.userSession!.memberId;
+      const updated = await sheetsTasksRepo.updateTask(req.params.id, req.body, memberId);
+      res.json({ success: true, task: updated });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch('/tasks/:id/status', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const role = req.userSession!.role;
+      const memberId = req.userSession!.memberId;
+      const { status, note } = req.body;
+      const updated = await sheetsTasksRepo.updateStatus(req.params.id, status, role, memberId, note);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.delete('/tasks/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const memberId = req.userSession!.memberId;
+      await sheetsTasksRepo.deleteTask(req.params.id, memberId);
+      res.json({ success: true, message: `Task ${req.params.id} deleted from ${sheetsTasksRepo.getTabName()}` });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
     }
   });
 
@@ -633,6 +875,91 @@ export function createApiRouter(): Router {
     try {
       const result = await migrationService.runMediaMigration();
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ============================================================================
+  // Google Sheets Service: Member Profiles & Tasks (Configured via .env)
+  // ============================================================================
+
+  router.get('/google-sheets/config', (req, res) => {
+    const config = googleSheetsService.getConfig();
+    res.json(config);
+  });
+
+  router.get('/google-sheets/status', async (req, res) => {
+    try {
+      const status = await googleSheetsService.checkConnection();
+      res.json(status);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/google-sheets/members', async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === 'true';
+      const includeDeleted = req.query.includeDeleted === 'true';
+      const members = await googleSheetsService.fetchFamilyMembers({ forceLive, includeDeleted });
+      res.json({
+        success: true,
+        count: members.length,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        sheetTab: googleSheetsService.getConfig().membersTab,
+        members,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/google-sheets/tasks', async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === 'true';
+      const memberId = req.query.memberId as string;
+      const includeDeleted = req.query.includeDeleted === 'true';
+      const tasks = await googleSheetsService.fetchTasks({ forceLive, memberId, includeDeleted });
+      res.json({
+        success: true,
+        count: tasks.length,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        sheetTab: googleSheetsService.getConfig().tasksTab,
+        tasks,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/google-sheets/lists', async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === 'true';
+      const includeDeleted = req.query.includeDeleted === 'true';
+      const lists = await googleSheetsService.fetchTaskLists({ forceLive, includeDeleted });
+      res.json({
+        success: true,
+        count: lists.length,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        sheetTab: googleSheetsService.getConfig().listsTab,
+        lists,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  router.get('/google-sheets/all-task-modules', async (req, res) => {
+    try {
+      const forceLive = req.query.forceLive === 'true';
+      const memberId = req.query.memberId as string;
+      const data = await googleSheetsService.fetchAllTaskModules({ forceLive, memberId });
+      res.json({
+        success: true,
+        spreadsheetId: googleSheetsService.getConfig().spreadsheetId,
+        ...data,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

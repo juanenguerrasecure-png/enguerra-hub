@@ -240,6 +240,8 @@ export interface DataVersionsMap {
 // Session & Auth
 export interface AuthUserSession {
   sessionId: string;
+  memberId: string;
+  role: FamilyRole;
   member: FamilyMember;
   deviceType: 'BROWSER' | 'MOBILE' | 'TABLET' | 'HUB';
   isParent: boolean;
