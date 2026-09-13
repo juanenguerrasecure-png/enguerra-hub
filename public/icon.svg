@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="warmGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C2410C" />
+      <stop offset="50%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+    <filter id="subtleShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.15" />
+    </filter>
+  </defs>
+  <!-- Background Rounded Canvas -->
+  <rect width="512" height="512" rx="112" fill="#F7F6F4" />
+  <!-- Inner Shield / Circle -->
+  <circle cx="256" cy="256" r="180" fill="url(#warmGrad)" filter="url(#subtleShadow)" />
+  <circle cx="256" cy="256" r="164" fill="none" stroke="#FEF3C7" stroke-width="4" stroke-opacity="0.6" stroke-dasharray="10 6" />
+  <!-- Monogram E and NY -->
+  <text x="256" y="280" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="160" font-weight="800" fill="#FFFFFF" text-anchor="middle" letter-spacing="-4">E</text>
+  <rect x="206" y="316" width="100" height="26" rx="13" fill="#FEF3C7" />
+  <text x="256" y="335" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="900" fill="#78350F" text-anchor="middle" letter-spacing="4">NEW YORK</text>
+  <!-- House Roof / Crest on Top -->
+  <path d="M224 136 L256 108 L288 136" stroke="#FEF3C7" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
