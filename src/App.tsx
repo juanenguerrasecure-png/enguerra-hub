@@ -10,7 +10,7 @@ import { RefreshCw, Smartphone, Tablet } from 'lucide-react';
 
 const MainContent: React.FC = () => {
   const { activeShell, deviceMode, detectedType, isAutoDetect, loading } = useAuth();
-  const [showSimulatedBezel, setShowSimulatedBezel] = React.useState(true);
+  const [showSimulatedBezel, setShowSimulatedBezel] = React.useState(false);
 
   if (loading) {
     return (
@@ -23,7 +23,7 @@ const MainContent: React.FC = () => {
     );
   }
 
-  // Determine if device needs a phone or tablet preview frame (only when simulating on a larger desktop screen)
+  // Determine if device needs a phone or tablet preview frame (only if developer explicitly enables bezel)
   const isSimulatingMobile = deviceMode === 'MOBILE' && detectedType === 'DESKTOP' && showSimulatedBezel;
   const isSimulatingTablet = deviceMode === 'TABLET' && detectedType === 'DESKTOP' && showSimulatedBezel;
   const isHubMode = deviceMode === 'HUB';
@@ -37,14 +37,14 @@ const MainContent: React.FC = () => {
       <main className={`flex-1 w-full mx-auto py-4 sm:py-6 ${
         isHubMode ? 'max-w-7xl px-2 sm:px-4' : 'max-w-7xl px-4 sm:px-6 lg:px-8'
       }`}>
-        {/* If simulating mobile on desktop, offer quick bezel toggle */}
-        {(deviceMode === 'MOBILE' || deviceMode === 'TABLET') && detectedType === 'DESKTOP' && (
+        {/* If simulating mobile on desktop with bezel active, offer quick bezel toggle */}
+        {(deviceMode === 'MOBILE' || deviceMode === 'TABLET') && detectedType === 'DESKTOP' && showSimulatedBezel && (
           <div className="flex items-center justify-center mb-4">
             <button
-              onClick={() => setShowSimulatedBezel(!showSimulatedBezel)}
+              onClick={() => setShowSimulatedBezel(false)}
               className="text-[11px] font-semibold text-stone-500 hover:text-stone-800 bg-stone-200/70 hover:bg-stone-200 px-3 py-1 rounded-full transition-colors"
             >
-              {showSimulatedBezel ? 'Switch to Full Width View' : 'Show Device Frame Preview'}
+              Switch to Full Width View
             </button>
           </div>
         )}

@@ -33,6 +33,17 @@ export const Header: React.FC = () => {
   } = useAuth();
 
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
+  
+  // Production environment check
+  const isProduction = import.meta.env.PROD || systemInfo?.appEnv === 'PROD';
+  
+  // Developer viewport simulator toggle (strictly disabled in production)
+  const [showDevSimulator, setShowDevSimulator] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('simulator') === 'true') return true;
+    return localStorage.getItem('enguerra_dev_simulator') === 'true';
+  });
 
   const currentMember = session?.member;
 
@@ -47,9 +58,11 @@ export const Header: React.FC = () => {
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-base font-bold text-stone-900 tracking-tight">Enguerra of NY</h1>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                {systemInfo?.appEnv || 'DEV'}
-              </span>
+              {!isProduction && (
+                <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                  {systemInfo?.appEnv || 'DEV'}
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-stone-500 hidden sm:block">
               Our Family. One App. A Brighter Everyday.
@@ -57,72 +70,69 @@ export const Header: React.FC = () => {
           </div>
         </div>
 
-        {/* Visual Mode Auto-Detection & Switcher */}
-        <div className="flex items-center space-x-1 sm:space-x-2">
-          {/* Main Device Switcher Bar */}
-          <div className="flex items-center bg-stone-100/90 p-1 rounded-xl border border-stone-200 text-stone-600 text-xs">
-            {/* Auto-detect button */}
-            <button
-              onClick={enableAutoDetect}
-              title={`Auto-detecting screen size (${detectedType})`}
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                isAutoDetect && deviceMode !== 'HUB'
-                  ? 'bg-blue-600 text-white shadow-xs'
-                  : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
-              }`}
-            >
-              <Sparkles className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">Auto</span>
-              <span className="text-[10px] uppercase opacity-90">({detectedType.slice(0, 3)})</span>
-            </button>
+        {/* Center Actions: Alternate HUB Access & (Optional Dev Simulator) */}
+        <div className="flex items-center space-x-2">
+          {/* Manual Device Simulator: strictly hidden in production, and hidden by default in DEV */}
+          {!isProduction && showDevSimulator && (
+            <div className="flex items-center bg-stone-100/90 p-1 rounded-xl border border-stone-200 text-stone-600 text-xs">
+              <button
+                onClick={enableAutoDetect}
+                title={`Auto-detecting screen size (${detectedType})`}
+                className={`flex items-center space-x-1 px-2 py-1 rounded-lg font-semibold transition-all ${
+                  isAutoDetect && deviceMode !== 'HUB'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900 hover:bg-white/60'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                <span className="text-[10px] uppercase font-bold">Auto ({detectedType.slice(0, 3)})</span>
+              </button>
 
-            {/* Desktop Mode Button */}
-            <button
-              onClick={() => switchDeviceMode('DESKTOP')}
-              title="Force Desktop Layout"
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all ${
-                !isAutoDetect && deviceMode === 'DESKTOP'
-                  ? 'bg-white text-stone-900 shadow-xs'
-                  : 'hover:text-stone-900'
-              }`}
-            >
-              <Monitor className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden md:inline">Desktop</span>
-            </button>
+              <button
+                onClick={() => switchDeviceMode('DESKTOP')}
+                title="Force Desktop Layout"
+                className={`flex items-center space-x-1 px-2 py-1 rounded-lg font-medium transition-all ${
+                  !isAutoDetect && deviceMode === 'DESKTOP'
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'hover:text-stone-900'
+                }`}
+              >
+                <Monitor className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden md:inline">Desktop</span>
+              </button>
 
-            {/* Tablet Mode Button */}
-            <button
-              onClick={() => switchDeviceMode('TABLET')}
-              title="Force Tablet Layout (iPad)"
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all ${
-                !isAutoDetect && deviceMode === 'TABLET'
-                  ? 'bg-white text-stone-900 shadow-xs'
-                  : 'hover:text-stone-900'
-              }`}
-            >
-              <Tablet className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden md:inline">Tablet</span>
-            </button>
+              <button
+                onClick={() => switchDeviceMode('TABLET')}
+                title="Force Tablet Layout"
+                className={`flex items-center space-x-1 px-2 py-1 rounded-lg font-medium transition-all ${
+                  !isAutoDetect && deviceMode === 'TABLET'
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'hover:text-stone-900'
+                }`}
+              >
+                <Tablet className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden md:inline">Tablet</span>
+              </button>
 
-            {/* Mobile Mode Button */}
-            <button
-              onClick={() => switchDeviceMode('MOBILE')}
-              title="Force Mobile Layout (iPhone)"
-              className={`flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-all ${
-                !isAutoDetect && deviceMode === 'MOBILE'
-                  ? 'bg-white text-stone-900 shadow-xs'
-                  : 'hover:text-stone-900'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden md:inline">Mobile</span>
-            </button>
-          </div>
+              <button
+                onClick={() => switchDeviceMode('MOBILE')}
+                title="Force Mobile Layout"
+                className={`flex items-center space-x-1 px-2 py-1 rounded-lg font-medium transition-all ${
+                  !isAutoDetect && deviceMode === 'MOBILE'
+                    ? 'bg-white text-stone-900 shadow-xs'
+                    : 'hover:text-stone-900'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden md:inline">Mobile</span>
+              </button>
+            </div>
+          )}
 
-          {/* Alternate HUB Access (Prominent dedicated toggle) */}
+          {/* Alternate HUB Access (Direct 1-click toggle between Family Hub and personal view) */}
           <button
             onClick={toggleHubMode}
-            title={deviceMode === 'HUB' ? 'Exit Family Hub and return to normal mode' : 'Switch to Family Hub Kiosk (Fridge/Wall Display)'}
+            title={deviceMode === 'HUB' ? 'Exit Family Hub and return to personal member view' : 'Switch to Family Hub Kiosk (Fridge/Wall Display)'}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs border ${
               deviceMode === 'HUB'
                 ? 'bg-amber-600 hover:bg-amber-700 text-white border-amber-500 ring-2 ring-amber-400/50'
@@ -131,7 +141,7 @@ export const Header: React.FC = () => {
           >
             <Tv className="w-3.5 h-3.5 shrink-0" />
             <span className="hidden sm:inline">
-              {deviceMode === 'HUB' ? 'Exit Hub' : 'Hub Mode'}
+              {deviceMode === 'HUB' ? 'Exit Hub' : 'Family Hub'}
             </span>
             <span className="text-[10px] uppercase font-black px-1.5 py-0.2 rounded bg-amber-200/80 text-amber-900">
               {deviceMode === 'HUB' ? 'ACTIVE' : 'KIOSK'}
@@ -231,6 +241,29 @@ export const Header: React.FC = () => {
                     </span>
                   </button>
                 </div>
+
+                {!isProduction && (
+                  <div className="border-t border-stone-100 pt-1.5 px-2">
+                    <button
+                      onClick={() => {
+                        const nextState = !showDevSimulator;
+                        setShowDevSimulator(nextState);
+                        localStorage.setItem('enguerra_dev_simulator', String(nextState));
+                      }}
+                      className="w-full px-2.5 py-1.5 rounded-lg text-xs font-medium text-stone-500 hover:bg-stone-50 flex items-center justify-between"
+                    >
+                      <div className="flex items-center space-x-2">
+                        <Smartphone className="w-3.5 h-3.5 text-stone-400" />
+                        <span>Dev Simulator Toolbar</span>
+                      </div>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                        showDevSimulator ? 'bg-blue-100 text-blue-700' : 'bg-stone-100 text-stone-500'
+                      }`}>
+                        {showDevSimulator ? 'ON' : 'OFF'}
+                      </span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
