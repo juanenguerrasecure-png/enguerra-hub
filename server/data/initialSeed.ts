@@ -8,7 +8,7 @@ export const INITIAL_MEMBERS: FamilyMember[] = [
     Display_Name: 'Juan (Dad)',
     Role: 'OWNER',
     Birth_Date: '1982-05-14',
-    Color: '#C2410C', // Rust Amber
+    Color: '#164E35', // RN Spruce Green
     Avatar_Key: 'juan',
     Avatar_URL: '',
     Avatar_Media_ID: 'media-avatar-juan',
@@ -98,76 +98,8 @@ export const INITIAL_PREFERENCES: UserPreferences[] = INITIAL_MEMBERS.map(m => (
   Updated_At: '2026-01-01T00:00:00.000Z',
 }));
 
-export const INITIAL_EVENTS: CalendarEvent[] = [
-  {
-    Event_ID: 'evt-family-dinner',
-    Title: 'Family Sunday Dinner & Planning',
-    Description: 'Enguerra weekly family catchup, meals, and upcoming school week coordination.',
-    Start_Time: new Date(Date.now() + 86400000 * 1).toISOString(),
-    End_Time: new Date(Date.now() + 86400000 * 1 + 7200000).toISOString(),
-    Location: 'Dining Room',
-    Assigned_Members: ['mem-juan-owner', 'mem-maria-admin', 'mem-amber-child', 'mem-alexa-child', 'mem-adine-child'],
-    Visibility: 'FAMILY',
-    Category: 'FAMILY',
-    Color: '#C2410C',
-    Created_By: 'mem-juan-owner',
-    Created_At: '2026-01-01T00:00:00.000Z',
-    Updated_At: '2026-01-01T00:00:00.000Z',
-    Version: 1,
-    Deleted_At: null,
-  },
-  {
-    Event_ID: 'evt-soccer-amber',
-    Title: 'Amber Youth Soccer Practice',
-    Description: 'Practice on Field 3. Bring shin guards and water bottle.',
-    Start_Time: new Date(Date.now() + 86400000 * 2 + 3600000 * 16).toISOString(),
-    End_Time: new Date(Date.now() + 86400000 * 2 + 3600000 * 18).toISOString(),
-    Location: 'Central Park North Meadow',
-    Assigned_Members: ['mem-amber-child', 'mem-juan-owner'],
-    Visibility: 'FAMILY',
-    Category: 'ACTIVITY',
-    Color: '#16A34A',
-    Created_By: 'mem-maria-admin',
-    Created_At: '2026-01-01T00:00:00.000Z',
-    Updated_At: '2026-01-01T00:00:00.000Z',
-    Version: 1,
-    Deleted_At: null,
-  },
-  {
-    Event_ID: 'evt-swim-alexa',
-    Title: 'Alexa Swim Lesson',
-    Description: 'Level 2 Stroke Development.',
-    Start_Time: new Date(Date.now() + 86400000 * 3 + 3600000 * 15).toISOString(),
-    End_Time: new Date(Date.now() + 86400000 * 3 + 3600000 * 16).toISOString(),
-    Location: 'Community Aquatic Center',
-    Assigned_Members: ['mem-alexa-child', 'mem-maria-admin'],
-    Visibility: 'FAMILY',
-    Category: 'ACTIVITY',
-    Color: '#9333EA',
-    Created_By: 'mem-maria-admin',
-    Created_At: '2026-01-01T00:00:00.000Z',
-    Updated_At: '2026-01-01T00:00:00.000Z',
-    Version: 1,
-    Deleted_At: null,
-  },
-  {
-    Event_ID: 'evt-parents-date',
-    Title: 'Parents Anniversary Dinner Reservation',
-    Description: 'Private table reservation for anniversary dinner.',
-    Start_Time: new Date(Date.now() + 86400000 * 5 + 3600000 * 19).toISOString(),
-    End_Time: new Date(Date.now() + 86400000 * 5 + 3600000 * 22).toISOString(),
-    Location: 'Gramercy Tavern',
-    Assigned_Members: ['mem-juan-owner', 'mem-maria-admin'],
-    Visibility: 'PARENTS_ONLY', // Hidden from kids!
-    Category: 'SPECIAL',
-    Color: '#C2410C',
-    Created_By: 'mem-juan-owner',
-    Created_At: '2026-01-01T00:00:00.000Z',
-    Updated_At: '2026-01-01T00:00:00.000Z',
-    Version: 1,
-    Deleted_At: null,
-  }
-];
+export const INITIAL_EVENTS: CalendarEvent[] = [];
+
 
 export const INITIAL_RESPONSIBILITIES: TaskResponsibility[] = [
   {

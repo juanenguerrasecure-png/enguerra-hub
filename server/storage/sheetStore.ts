@@ -43,12 +43,12 @@ export const SHEET_SCHEMA_TABS: Record<string, string[]> = {
   Events: [
     'Event_ID', 'Title', 'Description', 'Start_Time', 'End_Time', 'Location',
     'Assigned_Members', 'Visibility', 'Category', 'Color', 'Created_By', 'Created_At',
-    'Updated_At', 'Version', 'Deleted_At'
+    'Updated_At', 'Version', 'Deleted_At', 'Recurrence_Rule', 'Recurrence_Until'
   ],
   Tasks: [
     'Task_ID', 'Title', 'Description', 'Due_Date', 'Assigned_To', 'Status',
     'Priority', 'Visibility', 'Category', 'Points', 'Approved_By', 'Created_By',
-    'Created_At', 'Updated_At', 'Version', 'Deleted_At'
+    'Created_At', 'Updated_At', 'Version', 'Deleted_At', 'Responsibility_ID', 'Recurrence', 'Recurrence_Until'
   ],
   Task_Responsibilities: [
     'Responsibility_ID', 'Title', 'Category', 'Recurrence', 'Assigned_To',

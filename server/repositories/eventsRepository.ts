@@ -26,12 +26,14 @@ export class EventsRepository {
         Assigned_Members: assigned,
         Visibility: (r.Visibility || 'FAMILY') as EntityVisibility,
         Category: r.Category || 'FAMILY',
-        Color: r.Color || '#C2410C',
+        Color: r.Color || '#7A5AF8',
         Created_By: r.Created_By,
         Created_At: r.Created_At,
         Updated_At: r.Updated_At,
         Version: Number(r.Version) || 1,
         Deleted_At: r.Deleted_At || null,
+        Recurrence_Rule: r.Recurrence_Rule || 'NONE',
+        Recurrence_Until: r.Recurrence_Until || null,
       };
     });
   }

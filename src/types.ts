@@ -5,7 +5,16 @@
 
 export type FamilyRole = 'OWNER' | 'ADMIN' | 'CHILD';
 export type EntityVisibility = 'FAMILY' | 'PARENTS_ONLY' | 'PRIVATE' | 'HUB';
-export type TaskStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'APPROVED' | 'REOPENED';
+export type TaskStatus =
+  | 'OPEN'
+  | 'IN_PROGRESS'
+  | 'PENDING_APPROVAL'
+  | 'VERIFIED'
+  | 'REOPENED'
+  | 'CANCELLED'
+  | 'PENDING'    // legacy alias for OPEN
+  | 'COMPLETED'  // legacy alias for PENDING_APPROVAL
+  | 'APPROVED';  // legacy alias for VERIFIED
 export type DeviceShell = 'PARENT' | 'KIDS_OLDER' | 'KIDS_TODDLER' | 'FAMILY_HUB';
 
 export interface FamilyMember {
@@ -62,6 +71,8 @@ export interface CalendarEvent {
   Updated_At: string;
   Version: number;
   Deleted_At?: string | null;
+  Recurrence_Rule?: 'NONE' | 'DAILY' | 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'SCHOOL_DAYS';
+  Recurrence_Until?: string | null; // ISO date or YYYY-MM-DD
 }
 
 export interface TaskItem {
@@ -76,6 +87,9 @@ export interface TaskItem {
   Category: 'ROUTINE' | 'CHORE' | 'HOMEWORK' | 'PROJECT' | 'SELF_CARE';
   Points: number;
   Approved_By?: string | null;
+  Responsibility_ID?: string | null;
+  Recurrence?: 'NONE' | 'DAILY' | 'SCHOOL_DAYS' | 'WEEKENDS' | 'WEEKLY' | null;
+  Recurrence_Until?: string | null;
   Created_By: string;
   Created_At: string;
   Updated_At: string;

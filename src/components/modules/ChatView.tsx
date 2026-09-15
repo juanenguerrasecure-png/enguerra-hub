@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ChatThread, ChatMessage } from '../../types';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
+import { FamilyAvatar } from '../ui/FamilyAvatar';
 import {
   MessageSquare,
   Send,
@@ -146,13 +147,12 @@ export const ChatView: React.FC = () => {
                 key={msg.Message_ID}
                 className={`flex items-start space-x-2.5 ${isSelf ? 'flex-row-reverse space-x-reverse' : ''}`}
               >
-                <div
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs shrink-0"
-                  style={{ backgroundColor: sender?.Color || '#EA580C' }}
-                  title={sender?.Display_Name}
-                >
-                  {sender?.First_Name.charAt(0) || 'E'}
-                </div>
+                <FamilyAvatar
+                  member={sender}
+                  size="sm"
+                  shape="squircle"
+                  className="shrink-0"
+                />
 
                 <div className={`max-w-[75%] sm:max-w-md ${isSelf ? 'text-right' : ''}`}>
                   <div className="flex items-center space-x-1.5 mb-1">

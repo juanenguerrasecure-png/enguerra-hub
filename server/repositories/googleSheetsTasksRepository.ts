@@ -138,7 +138,8 @@ export class GoogleSheetsTasksRepository {
 
       if (role === 'CHILD') {
         if (t.Visibility === 'PARENTS_ONLY') return false;
-        if (t.Visibility === 'PRIVATE' && t.Assigned_To !== memberId && t.Created_By !== memberId) {
+        // Server-side enforcement: Child can only see their own assigned work
+        if (t.Assigned_To !== memberId) {
           return false;
         }
       }
@@ -328,6 +329,8 @@ export class GoogleSheetsTasksRepository {
 
   /**
    * Updates task status with role validation and audit history recording
+   * Preserves real workflow:
+   * OPEN -> IN_PROGRESS -> PENDING_APPROVAL -> VERIFIED -> REOPENED -> CANCELLED
    */
   public async updateStatus(
     taskId: string,
@@ -336,21 +339,45 @@ export class GoogleSheetsTasksRepository {
     memberId: string,
     note?: string
   ): Promise<TaskItem> {
-    // Child can mark their task COMPLETED, but only PARENT (OWNER/ADMIN) can APPROVE points
-    if (status === 'APPROVED' && memberRole === 'CHILD') {
-      throw new Error('PERMISSION_DENIED: Only parents can approve completed tasks and award points');
-    }
-
     const task = await this.getById(taskId);
     if (!task) {
       throw new Error(`Task with ID "${taskId}" not found`);
     }
 
-    const points = status === 'APPROVED' ? Number(task.Points) || 0 : 0;
-    const approvedBy = status === 'APPROVED' ? memberId : (status === 'REOPENED' ? null : task.Approved_By);
+    // Normalize legacy status aliases
+    let targetStatus: TaskStatus = status;
+    if ((status as any) === 'PENDING') targetStatus = 'OPEN';
+    else if ((status as any) === 'COMPLETED') targetStatus = 'PENDING_APPROVAL';
+    else if ((status as any) === 'APPROVED') targetStatus = 'VERIFIED';
+
+    // CHILD role validation
+    if (memberRole === 'CHILD') {
+      // Child can only update their own assigned work
+      if (task.Assigned_To !== memberId) {
+        throw new Error('PERMISSION_DENIED: Children can only update their own assigned tasks');
+      }
+
+      // Child can only mark in progress or finished (pending approval)
+      if (targetStatus !== 'IN_PROGRESS' && targetStatus !== 'PENDING_APPROVAL') {
+        throw new Error('PERMISSION_DENIED: Children can only mark tasks In Progress or Finished (Pending Parent Review)');
+      }
+    }
+
+    // Parental approval & reopening validation
+    if (
+      (targetStatus === 'VERIFIED' || targetStatus === 'REOPENED' || targetStatus === 'CANCELLED') &&
+      memberRole === 'CHILD'
+    ) {
+      throw new Error('PERMISSION_DENIED: Only parents can review, approve/verify, reopen, or cancel tasks');
+    }
+
+    const isVerified = targetStatus === 'VERIFIED';
+    const isReopened = targetStatus === 'REOPENED';
+    const points = isVerified ? (Number(task.Points) || 0) : 0;
+    const approvedBy = isVerified ? memberId : (isReopened ? null : task.Approved_By);
 
     const updatedTask = await this.updateTask(taskId, {
-      Status: status,
+      Status: targetStatus,
       Approved_By: approvedBy,
     }, memberId);
 
@@ -359,7 +386,7 @@ export class GoogleSheetsTasksRepository {
       History_ID: `th-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       Task_ID: taskId,
       Member_ID: memberId,
-      Action: status as any,
+      Action: targetStatus as any,
       Points_Awarded: points,
       Timestamp: new Date().toISOString(),
       Note: note || '',
@@ -372,7 +399,7 @@ export class GoogleSheetsTasksRepository {
       action: 'UPDATE_TASK_STATUS',
       entityType: 'TASK',
       entityId: taskId,
-      details: { status, pointsAwarded: points, note: note || '' },
+      details: { status: targetStatus, pointsAwarded: points, note: note || '' },
     });
 
     return updatedTask;
@@ -436,6 +463,185 @@ export class GoogleSheetsTasksRepository {
   }
 
   /**
+   * Creates a new recurring responsibility (Parent only)
+   */
+  public async createResponsibility(
+    data: {
+      title: string;
+      category?: string;
+      recurrence?: 'DAILY' | 'WEEKLY' | 'SCHOOL_DAYS' | 'WEEKENDS';
+      assignedTo: string;
+      targetDays?: string[];
+      points?: number;
+    },
+    createdBy: string
+  ): Promise<TaskResponsibility> {
+    const id = `resp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const now = new Date().toISOString();
+
+    const newResp: TaskResponsibility = {
+      Responsibility_ID: id,
+      Title: data.title.trim(),
+      Category: data.category || 'CHORE',
+      Recurrence: data.recurrence || 'DAILY',
+      Assigned_To: data.assignedTo,
+      Target_Days: data.targetDays || ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
+      Points: Number(data.points) || 10,
+      Active: true,
+      Created_At: now,
+      Updated_At: now,
+      Version: 1,
+      Deleted_At: null,
+    };
+
+    await this.localStore.upsertRecord('Task_Responsibilities', 'Responsibility_ID', newResp);
+
+    await this.auditRepo.logActivity({
+      memberId: createdBy,
+      action: 'CREATE_RESPONSIBILITY',
+      entityType: 'TASK',
+      entityId: id,
+      details: { title: newResp.Title, assignedTo: newResp.Assigned_To },
+    });
+
+    return newResp;
+  }
+
+  /**
+   * Updates an existing recurring responsibility (Parent only)
+   */
+  public async updateResponsibility(
+    id: string,
+    updates: Partial<TaskResponsibility>,
+    updaterId: string
+  ): Promise<TaskResponsibility> {
+    const all = await this.getResponsibilities();
+    const existing = all.find(r => r.Responsibility_ID === id);
+    if (!existing) {
+      throw new Error(`Responsibility with ID "${id}" not found`);
+    }
+
+    const now = new Date().toISOString();
+    const updated: TaskResponsibility = {
+      ...existing,
+      ...updates,
+      Updated_At: now,
+      Version: (existing.Version || 1) + 1,
+    };
+
+    await this.localStore.upsertRecord('Task_Responsibilities', 'Responsibility_ID', updated);
+
+    await this.auditRepo.logActivity({
+      memberId: updaterId,
+      action: 'UPDATE_RESPONSIBILITY',
+      entityType: 'TASK',
+      entityId: id,
+      details: updates,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Deletes a recurring responsibility (Parent only)
+   */
+  public async deleteResponsibility(id: string, memberId: string): Promise<void> {
+    const all = await this.getResponsibilities();
+    const existing = all.find(r => r.Responsibility_ID === id);
+    if (!existing) return;
+
+    const now = new Date().toISOString();
+    await this.localStore.upsertRecord('Task_Responsibilities', 'Responsibility_ID', {
+      ...existing,
+      Active: false,
+      Deleted_At: now,
+      Updated_At: now,
+      Version: (existing.Version || 1) + 1,
+    });
+
+    await this.auditRepo.logActivity({
+      memberId,
+      action: 'DELETE_RESPONSIBILITY',
+      entityType: 'TASK',
+      entityId: id,
+      details: { title: existing.Title },
+    });
+  }
+
+  /**
+   * Completes a recurring responsibility occurrence for a specific date.
+   * CRITICAL REQUIREMENT: "Recurring responsibility completion must not complete future occurrences."
+   * Creates or updates a discrete task item for `dateStr` without modifying future occurrences.
+   */
+  public async completeResponsibilityOccurrence(
+    responsibilityId: string,
+    dateStr: string,
+    memberRole: string,
+    memberId: string,
+    note?: string
+  ): Promise<TaskItem> {
+    const allResp = await this.getResponsibilities();
+    const resp = allResp.find(r => r.Responsibility_ID === responsibilityId);
+    if (!resp) {
+      throw new Error(`Responsibility "${responsibilityId}" not found`);
+    }
+
+    if (memberRole === 'CHILD' && resp.Assigned_To !== memberId) {
+      throw new Error('PERMISSION_DENIED: You can only complete your own assigned responsibilities');
+    }
+
+    // Concrete task instance for this date
+    const instanceTaskId = `inst-${responsibilityId}-${dateStr}`;
+    const targetStatus: TaskStatus = memberRole === 'CHILD' ? 'PENDING_APPROVAL' : 'VERIFIED';
+    const approvedBy = targetStatus === 'VERIFIED' ? memberId : null;
+
+    const existingTask = await this.getById(instanceTaskId);
+    let resultTask: TaskItem;
+
+    if (existingTask) {
+      resultTask = await this.updateTask(instanceTaskId, {
+        Status: targetStatus,
+        Approved_By: approvedBy,
+      }, memberId);
+    } else {
+      const now = new Date().toISOString();
+      const newTask: TaskItem = {
+        Task_ID: instanceTaskId,
+        Title: resp.Title,
+        Description: `Daily responsibility for ${dateStr}`,
+        Due_Date: dateStr,
+        Assigned_To: resp.Assigned_To,
+        Status: targetStatus,
+        Priority: 'MEDIUM',
+        Visibility: 'FAMILY',
+        Category: (resp.Category as any) || 'ROUTINE',
+        Points: resp.Points || 10,
+        Approved_By: approvedBy,
+        Responsibility_ID: resp.Responsibility_ID,
+        Created_By: memberId,
+        Created_At: now,
+        Updated_At: now,
+        Version: 1,
+        Deleted_At: null,
+      };
+
+      await this.localStore.upsertRecord('Tasks', 'Task_ID', newTask);
+      resultTask = newTask;
+    }
+
+    // Record audit history
+    await this.auditRepo.logActivity({
+      memberId,
+      action: 'COMPLETE_RESPONSIBILITY_OCCURRENCE',
+      entityType: 'TASK',
+      entityId: instanceTaskId,
+      details: { responsibilityId, dateStr, status: targetStatus, note: note || '' },
+    });
+
+    return resultTask;
+  }
+
+  /**
    * Retrieves task history entries
    */
   public async getHistory(taskId?: string, memberId?: string): Promise<TaskHistoryEntry[]> {
@@ -477,6 +683,9 @@ export class GoogleSheetsTasksRepository {
       Category: (getVal('Category') || 'CHORE') as any,
       Points: parseInt(getVal('Points'), 10) || 0,
       Approved_By: getVal('Approved_By') || null,
+      Responsibility_ID: getVal('Responsibility_ID') || null,
+      Recurrence: (getVal('Recurrence') as any) || null,
+      Recurrence_Until: getVal('Recurrence_Until') || null,
       Created_By: getVal('Created_By') || 'system',
       Created_At: getVal('Created_At') || new Date().toISOString(),
       Updated_At: getVal('Updated_At') || new Date().toISOString(),

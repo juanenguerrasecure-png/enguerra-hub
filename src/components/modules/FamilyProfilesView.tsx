@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { FamilyMember, FamilyRole } from '../../types';
+import { FamilyAvatar } from '../ui/FamilyAvatar';
 import {
   Users,
   Shield,
@@ -17,10 +18,15 @@ import {
   Eye,
   EyeOff,
   UserCheck,
-  Sparkles
+  Sparkles,
+  Camera,
+  Upload,
+  Trash2,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const PRESET_COLORS = [
+  { name: 'RN Spruce Green', hex: '#164E35' },
   { name: 'Terracotta', hex: '#EA580C' },
   { name: 'Sky Navy', hex: '#0284C7' },
   { name: 'Emerald', hex: '#10B981' },
@@ -29,14 +35,6 @@ const PRESET_COLORS = [
   { name: 'Rose Pink', hex: '#EC4899' },
   { name: 'Cyan Ocean', hex: '#06B6D4' },
   { name: 'Slate', hex: '#64748B' },
-];
-
-const PRESET_AVATARS = [
-  { key: 'dad', label: 'Dad (Juan)' },
-  { key: 'mom', label: 'Mom (Maria)' },
-  { key: 'amber', label: 'Amber' },
-  { key: 'alexa', label: 'Alexa' },
-  { key: 'adine', label: 'Adine' },
 ];
 
 function calculateAge(birthDateStr: string): number | null {
@@ -76,6 +74,24 @@ export const FamilyProfilesView: React.FC = () => {
 
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePhotoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setFeedback({ type: 'error', message: 'Selected image is larger than 5MB. Please select a smaller photo.' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setAvatarUrl(reader.result);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   const handleOpenEdit = (member: FamilyMember) => {
     setEditingMember(member);
@@ -124,7 +140,7 @@ export const FamilyProfilesView: React.FC = () => {
         Birth_Date: birthDate,
         Color: color,
         Avatar_Key: avatarKey || undefined,
-        Avatar_URL: avatarUrl.trim() || undefined,
+        Avatar_URL: avatarUrl.trim() ? avatarUrl.trim() : '',
       };
 
       // Role and Status changes restricted to OWNER
@@ -226,21 +242,12 @@ export const FamilyProfilesView: React.FC = () => {
                 {/* Card Header: Avatar & Badges */}
                 <div className="flex items-start justify-between">
                   <div className="flex items-center space-x-3">
-                    <div
-                      className="w-13 h-13 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-xs shrink-0"
-                      style={{ backgroundColor: member.Color || '#EA580C' }}
-                    >
-                      {member.Avatar_URL ? (
-                        <img
-                          src={member.Avatar_URL}
-                          alt={member.Display_Name}
-                          className="w-full h-full object-cover rounded-2xl"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        member.First_Name.charAt(0)
-                      )}
-                    </div>
+                    <FamilyAvatar
+                      member={member}
+                      size="touchAdult"
+                      shape="squircle"
+                      className="shrink-0"
+                    />
 
                     <div>
                       <div className="flex items-center space-x-1.5">
@@ -253,8 +260,18 @@ export const FamilyProfilesView: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-stone-500 mt-0.5">
-                        {member.First_Name} {member.Last_Name}
+                      <div className="text-xs text-stone-500 mt-0.5 flex items-center space-x-1.5">
+                        <span>{member.First_Name} {member.Last_Name}</span>
+                        {member.Avatar_URL ? (
+                          <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <Camera className="w-2.5 h-2.5" />
+                            <span>Photo</span>
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-stone-400 font-medium">
+                            Monogram
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -520,37 +537,102 @@ export const FamilyProfilesView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Avatar Preset & URL */}
-              <div className="space-y-2">
-                <label className="block font-semibold text-stone-800">Avatar Preset</label>
-                <div className="flex flex-wrap gap-2">
-                  {PRESET_AVATARS.map(av => (
-                    <button
-                      type="button"
-                      key={av.key}
-                      onClick={() => setAvatarKey(av.key)}
-                      className={`px-3 py-1.5 rounded-lg border text-xs font-medium cursor-pointer transition-colors ${
-                        avatarKey === av.key
-                          ? 'bg-stone-900 text-white border-stone-900'
-                          : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border-stone-200'
-                      }`}
-                    >
-                      {av.label}
-                    </button>
-                  ))}
+              {/* Profile Photo Upload & Settings */}
+              <div className="space-y-3 p-4 rounded-2xl bg-stone-50 border border-stone-200">
+                <div className="flex items-center justify-between">
+                  <label className="font-semibold text-stone-800 flex items-center space-x-1.5 text-sm">
+                    <Camera className="w-4 h-4 text-stone-700" />
+                    <span>Profile Photo</span>
+                  </label>
+                  {avatarUrl ? (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center space-x-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                      <span>Photo Attached</span>
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-stone-500 font-medium">
+                      Initials Monogram (Default)
+                    </span>
+                  )}
                 </div>
 
-                <div className="mt-2">
-                  <label className="block text-[11px] text-stone-500 mb-0.5">
-                    Or custom image URL (Google Drive or public photo link):
+                <div className="flex items-center space-x-4">
+                  {/* Current Photo / Monogram Live Preview */}
+                  <div className="relative shrink-0">
+                    <FamilyAvatar
+                      member={{
+                        First_Name: firstName,
+                        Last_Name: lastName,
+                        Display_Name: displayName,
+                        Avatar_URL: avatarUrl,
+                        Color: color,
+                      }}
+                      size="xl"
+                      shape="squircle"
+                      className="w-16 h-16 shadow-xs ring-2 ring-white text-xl"
+                    />
+                  </div>
+
+                  {/* Photo Actions */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        accept="image/*"
+                        onChange={handlePhotoFileChange}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-stone-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Upload Photo</span>
+                      </button>
+
+                      {avatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setAvatarUrl('')}
+                          className="inline-flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Remove Photo</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-stone-500 leading-normal">
+                      Upload any JPG, PNG, or WebP photo from your device. If no photo is uploaded, a clean monogram avatar with your theme color is used automatically.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Optional Direct Photo URL */}
+                <div className="pt-2 border-t border-stone-200/80">
+                  <label className="block text-[11px] font-medium text-stone-600 mb-1">
+                    Or paste direct image URL (Google Drive, public photo link):
                   </label>
-                  <input
-                    type="url"
-                    value={avatarUrl}
-                    onChange={e => setAvatarUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full px-3 py-2 rounded-xl border border-stone-300 text-stone-900 focus:outline-none focus:border-orange-600"
-                  />
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="url"
+                      value={avatarUrl}
+                      onChange={e => setAvatarUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 px-3 py-1.5 rounded-xl border border-stone-300 text-stone-900 text-xs focus:outline-none focus:border-stone-800"
+                    />
+                    {avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setAvatarUrl('')}
+                        className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-200/60"
+                        title="Clear URL"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 

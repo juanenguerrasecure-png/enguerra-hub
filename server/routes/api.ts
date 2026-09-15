@@ -572,6 +572,68 @@ export function createApiRouter(): Router {
     }
   });
 
+  router.post('/tasks/responsibilities', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const role = req.userSession!.role;
+      if (role !== 'OWNER' && role !== 'ADMIN') {
+        return res.status(403).json({ error: 'PERMISSION_DENIED: Only parents can create recurring responsibilities' });
+      }
+      const memberId = req.userSession!.memberId;
+      const resp = await sheetsTasksRepo.createResponsibility({
+        title: req.body.title || req.body.Title,
+        category: req.body.category || req.body.Category,
+        recurrence: req.body.recurrence || req.body.Recurrence,
+        assignedTo: req.body.assignedTo || req.body.Assigned_To,
+        targetDays: req.body.targetDays || req.body.Target_Days,
+        points: req.body.points || req.body.Points,
+      }, memberId);
+      res.status(201).json({ success: true, responsibility: resp });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.patch('/tasks/responsibilities/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const role = req.userSession!.role;
+      if (role !== 'OWNER' && role !== 'ADMIN') {
+        return res.status(403).json({ error: 'PERMISSION_DENIED: Only parents can update recurring responsibilities' });
+      }
+      const memberId = req.userSession!.memberId;
+      const updated = await sheetsTasksRepo.updateResponsibility(req.params.id, req.body, memberId);
+      res.json({ success: true, responsibility: updated });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.delete('/tasks/responsibilities/:id', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const role = req.userSession!.role;
+      if (role !== 'OWNER' && role !== 'ADMIN') {
+        return res.status(403).json({ error: 'PERMISSION_DENIED: Only parents can delete recurring responsibilities' });
+      }
+      const memberId = req.userSession!.memberId;
+      await sheetsTasksRepo.deleteResponsibility(req.params.id, memberId);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  router.post('/tasks/responsibilities/:id/complete', requireAuth, async (req: AuthenticatedRequest, res) => {
+    try {
+      const role = req.userSession!.role;
+      const memberId = req.userSession!.memberId;
+      const dateStr = req.body.date || new Date().toISOString().split('T')[0];
+      const note = req.body.note;
+      const task = await sheetsTasksRepo.completeResponsibilityOccurrence(req.params.id, dateStr, role, memberId, note);
+      res.json({ success: true, task });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
   router.get('/tasks/history', requireAuth, async (req: AuthenticatedRequest, res) => {
     try {
       const taskId = req.query.task_id as string | undefined;

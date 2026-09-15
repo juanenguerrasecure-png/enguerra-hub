@@ -2,10 +2,10 @@ import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header } from './components/common/Header';
 import { PinModal } from './components/common/PinModal';
-import { ParentShell } from './components/shells/ParentShell';
-import { KidsOlderShell } from './components/shells/KidsOlderShell';
+import { AdultAppShell } from './components/shells/AdultAppShell';
+import { KidsAppShell } from './components/shells/KidsAppShell';
 import { KidsToddlerShell } from './components/shells/KidsToddlerShell';
-import { FamilyHubShell } from './components/shells/FamilyHubShell';
+import { HubAppShell } from './components/shells/HubAppShell';
 import { RefreshCw, Smartphone, Tablet } from 'lucide-react';
 
 const MainContent: React.FC = () => {
@@ -32,13 +32,13 @@ const MainContent: React.FC = () => {
     <div className={`min-h-screen flex flex-col ${
       isHubMode ? 'bg-slate-950 text-white' : 'bg-stone-50/80 text-stone-900'
     }`}>
-      <Header />
+      {!isHubMode && <Header />}
 
-      <main className={`flex-1 w-full mx-auto py-4 sm:py-6 ${
-        isHubMode ? 'max-w-7xl px-2 sm:px-4' : 'max-w-7xl px-4 sm:px-6 lg:px-8'
+      <main className={`flex-1 w-full mx-auto ${
+        isHubMode ? 'max-w-none p-0' : 'max-w-7xl px-2 sm:px-4 lg:px-6 py-2 sm:py-4'
       }`}>
         {/* If simulating mobile on desktop with bezel active, offer quick bezel toggle */}
-        {(deviceMode === 'MOBILE' || deviceMode === 'TABLET') && detectedType === 'DESKTOP' && showSimulatedBezel && (
+        {!isHubMode && (deviceMode === 'MOBILE' || deviceMode === 'TABLET') && detectedType === 'DESKTOP' && showSimulatedBezel && (
           <div className="flex items-center justify-center mb-4">
             <button
               onClick={() => setShowSimulatedBezel(false)}
@@ -82,15 +82,15 @@ const MainContent: React.FC = () => {
 function renderShell(shell: string) {
   switch (shell) {
     case 'PARENT':
-      return <ParentShell />;
+      return <AdultAppShell />;
     case 'KIDS_OLDER':
-      return <KidsOlderShell />;
+      return <KidsAppShell />;
     case 'KIDS_TODDLER':
       return <KidsToddlerShell />;
     case 'FAMILY_HUB':
-      return <FamilyHubShell />;
+      return <HubAppShell />;
     default:
-      return <ParentShell />;
+      return <AdultAppShell />;
   }
 }
 

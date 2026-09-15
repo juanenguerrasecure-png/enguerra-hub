@@ -22,19 +22,22 @@ export class CalendarService {
     color?: string;
   }, createdByMemberId: string): Promise<CalendarEvent> {
     const eventId = `evt-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const d = eventData as any;
     const event = await this.eventsRepo.create({
       Event_ID: eventId,
-      Title: eventData.title,
-      Description: eventData.description || '',
-      Start_Time: eventData.startTime,
-      End_Time: eventData.endTime,
-      Location: eventData.location || '',
-      Assigned_Members: eventData.assignedMembers || [createdByMemberId],
-      Visibility: eventData.visibility || 'FAMILY',
-      Category: eventData.category || 'FAMILY',
-      Color: eventData.color || '#C2410C',
+      Title: d.Title || d.title || 'Family Event',
+      Description: d.Description || d.description || '',
+      Start_Time: d.Start_Time || d.startTime,
+      End_Time: d.End_Time || d.endTime,
+      Location: d.Location || d.location || '',
+      Assigned_Members: d.Assigned_Members || d.assignedMembers || [createdByMemberId],
+      Visibility: d.Visibility || d.visibility || 'FAMILY',
+      Category: d.Category || d.category || 'FAMILY',
+      Color: d.Color || d.color || '#7A5AF8',
       Created_By: createdByMemberId,
       Deleted_At: null,
+      Recurrence_Rule: d.Recurrence_Rule || d.recurrenceRule || 'NONE',
+      Recurrence_Until: d.Recurrence_Until || d.recurrenceUntil || null,
     });
 
     await this.auditRepo.logActivity({

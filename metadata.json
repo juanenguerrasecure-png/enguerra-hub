@@ -2,5 +2,7 @@
   "name": "Enguerra of NY",
   "description": "Enguerra of NY family application with private Google Sheets data persistence, Google Drive media storage, and dedicated Parent, Kids, and Family Hub shells.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

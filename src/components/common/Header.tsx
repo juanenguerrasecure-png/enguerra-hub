@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import { FamilyAvatar } from '../ui/FamilyAvatar';
 import {
   Users,
   Smartphone,
@@ -52,12 +53,12 @@ export const Header: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
         {/* Brand & Crest */}
         <div className="flex items-center space-x-3 shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-700 to-indigo-800 text-white flex items-center justify-center font-serif text-lg font-bold shadow-xs">
+          <div className="w-10 h-10 rounded-xl bg-[#1C1E21] text-white flex items-center justify-center text-sm font-black tracking-wider shadow-xs">
             EN
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h1 className="text-base font-bold text-stone-900 tracking-tight">Enguerra of NY</h1>
+              <h1 className="text-base font-bold text-[#1C1E21] tracking-tight">Enguerra of NY</h1>
               {!isProduction && (
                 <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                   {systemInfo?.appEnv || 'DEV'}
@@ -173,12 +174,12 @@ export const Header: React.FC = () => {
               onClick={() => setIsProfileDropdownOpen(prev => !prev)}
               className="flex items-center space-x-2 p-1.5 pr-2.5 rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors"
             >
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-sm shadow-xs"
-                style={{ backgroundColor: currentMember?.Color || '#EA580C' }}
-              >
-                {currentMember?.First_Name.charAt(0) || 'E'}
-              </div>
+              <FamilyAvatar
+                member={currentMember}
+                size="sm"
+                shape="squircle"
+                showBorder={false}
+              />
               <div className="text-left hidden sm:block">
                 <div className="text-xs font-semibold text-stone-900 leading-tight">
                   {currentMember?.First_Name || 'Select Member'}
@@ -206,12 +207,12 @@ export const Header: React.FC = () => {
                       className="w-full px-3 py-2 text-left flex items-center justify-between hover:bg-stone-50 transition-colors"
                     >
                       <div className="flex items-center space-x-2.5">
-                        <div
-                          className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold"
-                          style={{ backgroundColor: m.Color }}
-                        >
-                          {m.First_Name.charAt(0)}
-                        </div>
+                        <FamilyAvatar
+                          member={m}
+                          size="xs"
+                          shape="squircle"
+                          showBorder={false}
+                        />
                         <div>
                           <div className="text-xs font-medium text-stone-800">{m.Display_Name}</div>
                           <div className="text-[10px] text-stone-400 uppercase">{m.Role}</div>

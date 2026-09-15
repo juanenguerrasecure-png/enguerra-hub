@@ -211,12 +211,16 @@ class ApiClient {
   }
 
   // Tasks
-  public async getTasks(filter?: { assignedTo?: string; status?: string; category?: string; priority?: string }): Promise<TaskItem[]> {
+  public async getTasks(filter?: string | { assignedTo?: string; status?: string; category?: string; priority?: string }): Promise<TaskItem[]> {
     const params = new URLSearchParams();
-    if (filter?.assignedTo) params.append('assigned_to', filter.assignedTo);
-    if (filter?.status) params.append('status', filter.status);
-    if (filter?.category) params.append('category', filter.category);
-    if (filter?.priority) params.append('priority', filter.priority);
+    if (typeof filter === 'string') {
+      if (filter) params.append('assigned_to', filter);
+    } else if (filter) {
+      if (filter.assignedTo) params.append('assigned_to', filter.assignedTo);
+      if (filter.status) params.append('status', filter.status);
+      if (filter.category) params.append('category', filter.category);
+      if (filter.priority) params.append('priority', filter.priority);
+    }
     const qs = params.toString() ? `?${params.toString()}` : '';
     return this.request<TaskItem[]>(`/api/tasks${qs}`);
   }
@@ -249,6 +253,33 @@ class ApiClient {
   public async getResponsibilities(assignedTo?: string): Promise<TaskResponsibility[]> {
     const query = assignedTo ? `?assigned_to=${assignedTo}` : '';
     return this.request<TaskResponsibility[]>(`/api/tasks/responsibilities${query}`);
+  }
+
+  public async createResponsibility(resp: Partial<TaskResponsibility>): Promise<{ success: boolean; responsibility: TaskResponsibility }> {
+    return this.request('/api/tasks/responsibilities', {
+      method: 'POST',
+      body: JSON.stringify(resp),
+    });
+  }
+
+  public async updateResponsibility(id: string, updates: Partial<TaskResponsibility>): Promise<{ success: boolean; responsibility: TaskResponsibility }> {
+    return this.request(`/api/tasks/responsibilities/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  public async deleteResponsibility(id: string): Promise<{ success: boolean }> {
+    return this.request(`/api/tasks/responsibilities/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  public async completeResponsibilityOccurrence(id: string, date?: string, note?: string): Promise<{ success: boolean; task: TaskItem }> {
+    return this.request(`/api/tasks/responsibilities/${id}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ date, note }),
+    });
   }
 
   public async getTaskHistory(taskId?: string, memberId?: string): Promise<TaskHistoryEntry[]> {
